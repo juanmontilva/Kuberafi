@@ -37,6 +37,9 @@ class Commission extends Model
 
     public static function createFromOrder(Order $order)
     {
+        // Asegurar que exchangeHouse esté cargado para evitar N+1
+        $order->loadMissing('exchangeHouse');
+        
         $commissions = $order->calculateCommissions();
         $platformRate = SystemSetting::getPlatformCommissionRate();
 

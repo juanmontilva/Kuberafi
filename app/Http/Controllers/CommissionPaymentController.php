@@ -171,14 +171,15 @@ class CommissionPaymentController extends Controller
             abort(403);
         }
 
-        // Pagos pendientes por casa de cambio
+        // Pagos pendientes por casa de cambio - Optimizado para evitar N+1
         $pendingByHouse = CommissionPayment::with('exchangeHouse')
             ->where('status', 'pending')
             ->get()
             ->groupBy('exchange_house_id')
             ->map(function ($payments) {
+                $firstPayment = $payments->first();
                 return [
-                    'house' => $payments->first()->exchangeHouse,
+                    'house' => $firstPayment->exchangeHouse, // Ya cargado por with()
                     'total' => $payments->sum('total_amount'),
                     'count' => $payments->count(),
                     'oldest' => $payments->min('due_date'),

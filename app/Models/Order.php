@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Builder;
 
 class Order extends Model
 {
@@ -85,6 +86,32 @@ class Order extends Model
         }
 
         return (($this->applied_rate - $this->market_rate) / $this->market_rate) * 100;
+    }
+
+    // Query Scopes para optimización
+    public function scopeToday(Builder $query): Builder
+    {
+        return $query->whereDate('created_at', today());
+    }
+
+    public function scopeThisMonth(Builder $query): Builder
+    {
+        return $query->where('created_at', '>=', now()->startOfMonth());
+    }
+
+    public function scopeByStatus(Builder $query, string $status): Builder
+    {
+        return $query->where('status', $status);
+    }
+
+    public function scopeForExchangeHouse(Builder $query, int $exchangeHouseId): Builder
+    {
+        return $query->where('exchange_house_id', $exchangeHouseId);
+    }
+
+    public function scopeWithRelations(Builder $query): Builder
+    {
+        return $query->with(['exchangeHouse', 'currencyPair', 'user']);
     }
 
     protected static function boot()

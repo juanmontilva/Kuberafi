@@ -52,7 +52,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     // Rutas para Casas de Cambio y Super Admin
     Route::middleware(['role:super_admin,exchange_house,operator'])->group(function () {
-        Route::resource('orders', App\Http\Controllers\OrderController::class);
+        Route::resource('orders', App\Http\Controllers\OrderController::class)
+            ->middleware('rate.limit.orders')->only(['store']);
+        Route::resource('orders', App\Http\Controllers\OrderController::class)
+            ->except(['store']);
     });
 
     // Rutas solo para Casas de Cambio y Operadores

@@ -20,10 +20,12 @@ return Application::configure(basePath: dirname(__DIR__))
             HandleAppearance::class,
             HandleInertiaRequests::class,
             AddLinkHeadersForPreloadedAssets::class,
+            \App\Http\Middleware\PerformanceMonitor::class,
         ]);
 
         $middleware->alias([
             'role' => \App\Http\Middleware\RoleMiddleware::class,
+            'rate.limit.orders' => \App\Http\Middleware\RateLimitOrders::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions) {

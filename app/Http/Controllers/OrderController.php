@@ -15,18 +15,23 @@ class OrderController extends Controller
     {
         $user = $request->user();
         
-        $query = Order::with(['exchangeHouse', 'currencyPair', 'user']);
+        $query = Order::withRelations();
         
         // Filtrar según el rol del usuario
         if ($user->isSuperAdmin()) {
             // Super Admin puede ver todas las órdenes
-            // No aplicar filtros
+            // No aplicar filtros adicionales
         } elseif ($user->isExchangeHouse() || $user->isOperator()) {
-            $query->where('exchange_house_id', $user->exchange_house_id);
+            $query->forExchangeHouse($user->exchange_house_id);
             
             if ($user->isOperator()) {
                 $query->where('user_id', $user->id);
             }
+        }
+        
+        // Aplicar filtros de request si existen
+        if ($request->has('status')) {
+            $query->byStatus($request->get('status'));
         }
         
         $orders = $query->orderBy('created_at', 'desc')->paginate(20);
@@ -82,13 +87,13 @@ class OrderController extends Controller
             ]);
         }
         
-        DB::transaction(function () use ($validated, $currencyPair, $user) {
+        $order = DB::transaction(function () use ($validated, $currencyPair, $user) {
             // Calcular tasa aplicada con margen
             $appliedRate = $currencyPair->current_rate * (1 + ($validated['expected_margin_percent'] / 100));
             $quoteAmount = $validated['base_amount'] * $appliedRate;
             
-            // Crear la orden
-            $order = Order::create([
+            // Crear la orden (rápido, sin comisiones)
+            return Order::create([
                 'exchange_house_id' => $user->exchange_house_id,
                 'currency_pair_id' => $validated['currency_pair_id'],
                 'user_id' => $user->id,
@@ -100,10 +105,10 @@ class OrderController extends Controller
                 'status' => 'pending',
                 'notes' => $validated['notes'] ?? null,
             ]);
-            
-            // Crear comisiones
-            Commission::createFromOrder($order);
         });
+
+        // Procesar comisiones de forma asíncrona para mejor performance
+        \App\Jobs\ProcessOrderCommissions::dispatch($order->id);
         
         return redirect()->route('orders.index')
             ->with('success', 'Orden creada exitosamente');

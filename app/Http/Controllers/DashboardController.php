@@ -9,6 +9,7 @@ use App\Models\CurrencyPair;
 use App\Models\User;
 use App\Models\SystemSetting;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Inertia\Inertia;
 use Carbon\Carbon;
 
@@ -35,15 +36,25 @@ class DashboardController extends Controller
         $lastMonth = Carbon::now()->subMonth()->startOfMonth();
         $thisYear = Carbon::now()->startOfYear();
         
-        // Estadísticas generales
-        $totalExchangeHouses = ExchangeHouse::where('is_active', true)->count();
-        $totalUsers = User::where('is_active', true)->count();
-        $totalOrdersToday = Order::whereDate('created_at', $today)->count();
-        $totalOrdersYesterday = Order::whereDate('created_at', $yesterday)->count();
-        $totalVolumeToday = Order::whereDate('created_at', $today)->sum('base_amount');
-        $totalVolumeYesterday = Order::whereDate('created_at', $yesterday)->sum('base_amount');
-        $totalVolumeMonth = Order::where('created_at', '>=', $thisMonth)->sum('base_amount');
-        $totalVolumeLastMonth = Order::whereBetween('created_at', [$lastMonth, $thisMonth])->sum('base_amount');
+        // Cache key único por día
+        $cacheKey = 'dashboard_stats_' . $today->format('Y-m-d');
+        $cacheTtl = config('performance.cache.dashboard_ttl', 300);
+        
+        // Usar cache para estadísticas básicas
+        $basicStats = Cache::remember($cacheKey, $cacheTtl, function () use ($today, $yesterday, $thisMonth, $lastMonth) {
+            return [
+                'totalExchangeHouses' => ExchangeHouse::where('is_active', true)->count(),
+                'totalUsers' => User::where('is_active', true)->count(),
+                'totalOrdersToday' => Order::whereDate('created_at', $today)->count(),
+                'totalOrdersYesterday' => Order::whereDate('created_at', $yesterday)->count(),
+                'totalVolumeToday' => Order::whereDate('created_at', $today)->sum('base_amount'),
+                'totalVolumeYesterday' => Order::whereDate('created_at', $yesterday)->sum('base_amount'),
+                'totalVolumeMonth' => Order::where('created_at', '>=', $thisMonth)->sum('base_amount'),
+                'totalVolumeLastMonth' => Order::whereBetween('created_at', [$lastMonth, $thisMonth])->sum('base_amount'),
+            ];
+        });
+        
+        extract($basicStats);
         
         // Comisiones de la plataforma
         $platformCommissionsToday = Commission::where('type', 'platform')
@@ -104,19 +115,20 @@ class DashboardController extends Controller
             ->groupBy('status')
             ->get();
 
-        // Órdenes recientes
-        $recentOrders = Order::with(['exchangeHouse', 'currencyPair', 'user'])
+        // Órdenes recientes - usar scope optimizado
+        $recentOrders = Order::withRelations()
             ->orderBy('created_at', 'desc')
             ->limit(8)
             ->get();
 
-        // Top casas de cambio por volumen
+        // Top casas de cambio por volumen - Optimizado con una sola consulta
         $topExchangeHouses = ExchangeHouse::withSum(['orders' => function($query) use ($thisMonth) {
                 $query->where('created_at', '>=', $thisMonth);
             }], 'base_amount')
             ->withCount(['orders' => function($query) use ($thisMonth) {
                 $query->where('created_at', '>=', $thisMonth);
             }])
+            ->having('orders_sum_base_amount', '>', 0) // Solo casas con órdenes
             ->orderBy('orders_sum_base_amount', 'desc')
             ->limit(5)
             ->get();
@@ -247,6 +259,7 @@ class DashboardController extends Controller
             'stats' => [
                 'totalCommissions' => number_format($totalCommissions, 2),
                 'monthlyCommissions' => number_format($monthlyCommissions, 2),
+                'platformCommissionRate' => SystemSetting::getPlatformCommissionRate(),
             ],
         ]);
     }

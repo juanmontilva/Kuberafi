@@ -37,6 +37,7 @@ interface PaginatedCommissions {
 interface Stats {
   totalCommissions: string;
   monthlyCommissions: string;
+  platformCommissionRate: string;
 }
 
 interface Props {
@@ -47,10 +48,11 @@ interface Props {
 function AdminCommissions({ commissions, stats }: Props) {
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'paid': return 'bg-green-100 text-green-800';
-      case 'pending': return 'bg-yellow-100 text-yellow-800';
-      case 'cancelled': return 'bg-red-100 text-red-800';
-      default: return 'bg-gray-100 text-gray-800';
+      // Negro elegante: superficie negra con acentos en texto/borde
+      case 'paid': return 'bg-black text-green-400 border border-green-700';
+      case 'pending': return 'bg-black text-yellow-400 border border-yellow-700';
+      case 'cancelled': return 'bg-black text-red-400 border border-red-700';
+      default: return 'bg-black text-gray-300 border border-gray-700';
     }
   };
 
@@ -71,7 +73,7 @@ function AdminCommissions({ commissions, stats }: Props) {
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Comisiones de Plataforma</h1>
           <p className="text-muted-foreground">
-            Gestiona las comisiones generadas por la plataforma (0.15%)
+            Gestiona las comisiones generadas por la plataforma ({stats.platformCommissionRate}%)
           </p>
         </div>
 
@@ -109,7 +111,7 @@ function AdminCommissions({ commissions, stats }: Props) {
               <TrendingUp className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">0.15%</div>
+              <div className="text-2xl font-bold">{stats.platformCommissionRate}%</div>
               <p className="text-xs text-muted-foreground">
                 Por transacción
               </p>
@@ -129,7 +131,7 @@ function AdminCommissions({ commissions, stats }: Props) {
             <div className="space-y-4">
               {commissions.data.length > 0 ? (
                 commissions.data.map((commission) => (
-                  <div key={commission.id} className="flex items-center justify-between p-4 border rounded-lg hover:bg-muted/50">
+                  <div key={commission.id} className="flex items-center justify-between p-4 rounded-lg bg-black border border-gray-800 hover:bg-gray-900">
                     <div className="space-y-1">
                       <div className="flex items-center gap-2">
                         <p className="text-sm font-medium">{commission.order.order_number}</p>
