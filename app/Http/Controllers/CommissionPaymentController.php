@@ -93,7 +93,7 @@ class CommissionPaymentController extends Controller
             ->get();
 
         return Inertia::render('Admin/PaymentSchedules', [
-            'schedules' => $schedules,
+            'paymentSchedules' => $schedules,
             'exchangeHouses' => $exchangeHouses,
         ]);
     }
