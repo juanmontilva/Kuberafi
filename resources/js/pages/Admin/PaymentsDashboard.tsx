@@ -54,10 +54,11 @@ function PaymentsDashboard({ pendingByHouse, overduePayments, upcomingPayments }
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'paid': return 'bg-green-900 text-green-300 border-green-700';
-      case 'pending': return 'bg-yellow-900 text-yellow-300 border-yellow-700';
-      case 'overdue': return 'bg-red-900 text-red-300 border-red-700';
-      default: return 'bg-gray-800 text-gray-300 border-gray-700';
+      // Estilo shadcn/ui: superficies negras, acentos solo en texto/borde
+      case 'paid': return 'bg-black text-green-400 border border-green-700';
+      case 'pending': return 'bg-black text-yellow-400 border border-yellow-700';
+      case 'overdue': return 'bg-black text-red-400 border border-red-700';
+      default: return 'bg-black text-gray-300 border border-gray-700';
     }
   };
 
@@ -108,7 +109,7 @@ function PaymentsDashboard({ pendingByHouse, overduePayments, upcomingPayments }
 
         {/* Alertas importantes */}
         {overduePayments.length > 0 && (
-          <Alert className="border-red-800 bg-red-950">
+          <Alert className="bg-black border-red-800">
             <AlertTriangle className="h-4 w-4 text-red-400" />
             <AlertDescription className="text-red-300">
               <strong>¡Atención!</strong> Tienes {overduePayments.length} pagos vencidos por un total de ${totalOverdue.toFixed(2)}
@@ -196,7 +197,7 @@ function PaymentsDashboard({ pendingByHouse, overduePayments, upcomingPayments }
               <div className="space-y-4">
                 {pendingByHouse.length > 0 ? (
                   pendingByHouse.map((item) => (
-                    <div key={item.house.id} className="flex items-center justify-between p-4 rounded-lg bg-gray-900 border border-gray-800">
+                    <div key={item.house.id} className="flex items-center justify-between p-4 rounded-lg bg-black border border-gray-800 hover:bg-gray-900">
                       <div className="space-y-1">
                         <p className="text-sm font-medium text-white">{item.house.name}</p>
                         <p className="text-xs text-gray-400">{item.house.business_name}</p>
@@ -239,7 +240,7 @@ function PaymentsDashboard({ pendingByHouse, overduePayments, upcomingPayments }
               <div className="space-y-4">
                 {overduePayments.length > 0 ? (
                   overduePayments.map((payment) => (
-                    <div key={payment.id} className="flex items-center justify-between p-4 rounded-lg bg-red-950 border border-red-800">
+                    <div key={payment.id} className="flex items-center justify-between p-4 rounded-lg bg-black border border-red-800 hover:bg-gray-900">
                       <div className="space-y-1">
                         <p className="text-sm font-medium text-white">{payment.payment_number}</p>
                         <p className="text-xs text-gray-300">{payment.exchange_house.name}</p>
@@ -249,7 +250,7 @@ function PaymentsDashboard({ pendingByHouse, overduePayments, upcomingPayments }
                       </div>
                       <div className="text-right">
                         <p className="text-sm font-bold text-red-300">${payment.total_amount}</p>
-                        <Badge className="mt-1 bg-red-900 text-red-300 border-red-700">
+                        <Badge className="mt-1 bg-black text-red-400 border border-red-700">
                           Vencido
                         </Badge>
                       </div>
@@ -281,7 +282,7 @@ function PaymentsDashboard({ pendingByHouse, overduePayments, upcomingPayments }
             <CardContent>
               <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                 {upcomingPayments.map((payment) => (
-                  <div key={payment.id} className="p-4 rounded-lg bg-gray-900 border border-gray-800">
+                  <div key={payment.id} className="p-4 rounded-lg bg-black border border-gray-800 hover:bg-gray-900">
                     <div className="space-y-2">
                       <div className="flex items-center justify-between">
                         <p className="text-sm font-medium text-white">{payment.payment_number}</p>

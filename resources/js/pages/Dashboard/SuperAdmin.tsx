@@ -115,11 +115,12 @@ interface Props {
 function SuperAdminDashboard({ stats, chartData, recentOrders, topExchangeHouses }: Props) {
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'completed': return 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300';
-      case 'pending': return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300';
-      case 'processing': return 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300';
-      case 'cancelled': return 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300';
-      default: return 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300';
+      // Estilo negro elegante tipo shadcn/ui: superficie negra, acentos en texto/borde
+      case 'completed': return 'bg-black text-green-400 border border-green-700';
+      case 'pending': return 'bg-black text-yellow-400 border border-yellow-700';
+      case 'processing': return 'bg-black text-blue-400 border border-blue-700';
+      case 'cancelled': return 'bg-black text-red-400 border border-red-700';
+      default: return 'bg-black text-gray-300 border border-gray-700';
     }
   };
 
@@ -345,7 +346,7 @@ function SuperAdminDashboard({ stats, chartData, recentOrders, topExchangeHouses
                         </td>
                         <td className="p-4 text-white font-medium">${house.orders_sum_base_amount || '0.00'}</td>
                         <td className="p-4">
-                          <Badge className="bg-green-900 text-green-300 border-green-700">
+                          <Badge className="bg-black text-green-400 border border-green-700">
                             Activo
                           </Badge>
                         </td>
@@ -367,7 +368,7 @@ function SuperAdminDashboard({ stats, chartData, recentOrders, topExchangeHouses
                 <h3 className="text-white font-medium mb-4">Transacciones Recientes</h3>
                 <div className="space-y-3">
                   {recentOrders.slice(0, 5).map((order) => (
-                    <div key={order.id} className="flex items-center justify-between p-3 rounded-lg bg-gray-900 border border-gray-800">
+                    <div key={order.id} className="flex items-center justify-between p-3 rounded-lg bg-black border border-gray-800 hover:bg-gray-900">
                       <div className="flex items-center gap-3">
                         <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center">
                           <DollarSign className="h-4 w-4 text-white" />
@@ -395,7 +396,7 @@ function SuperAdminDashboard({ stats, chartData, recentOrders, topExchangeHouses
               <div className="p-6">
                 <h3 className="text-white font-medium mb-4">Personal Clave</h3>
                 <div className="space-y-3">
-                  <div className="flex items-center justify-between p-3 rounded-lg bg-gray-900 border border-gray-800">
+                  <div className="flex items-center justify-between p-3 rounded-lg bg-black border border-gray-800 hover:bg-gray-900">
                     <div className="flex items-center gap-3">
                       <div className="w-8 h-8 rounded-full bg-gray-700 flex items-center justify-center">
                         <Users className="h-4 w-4 text-white" />
@@ -405,11 +406,11 @@ function SuperAdminDashboard({ stats, chartData, recentOrders, topExchangeHouses
                         <div className="text-gray-400 text-xs">Control total de la plataforma</div>
                       </div>
                     </div>
-                    <Badge className="bg-purple-900 text-purple-300 border-purple-700">
+                    <Badge className="bg-black text-purple-400 border border-purple-700">
                       Admin
                     </Badge>
                   </div>
-                  <div className="flex items-center justify-between p-3 rounded-lg bg-gray-900 border border-gray-800">
+                  <div className="flex items-center justify-between p-3 rounded-lg bg-black border border-gray-800 hover:bg-gray-900">
                     <div className="flex items-center gap-3">
                       <div className="w-8 h-8 rounded-full bg-gray-700 flex items-center justify-center">
                         <Building2 className="h-4 w-4 text-white" />
@@ -419,7 +420,7 @@ function SuperAdminDashboard({ stats, chartData, recentOrders, topExchangeHouses
                         <div className="text-gray-400 text-xs">{stats.totalExchangeHouses} casas activas</div>
                       </div>
                     </div>
-                    <Badge className="bg-blue-900 text-blue-300 border-blue-700">
+                    <Badge className="bg-black text-blue-400 border border-blue-700">
                       Activo
                     </Badge>
                   </div>
@@ -433,7 +434,7 @@ function SuperAdminDashboard({ stats, chartData, recentOrders, topExchangeHouses
               <div className="p-6">
                 <h3 className="text-white font-medium mb-4">Documentos de Enfoque</h3>
                 <div className="space-y-3">
-                  <div className="flex items-center justify-between p-3 rounded-lg bg-gray-900 border border-gray-800">
+                  <div className="flex items-center justify-between p-3 rounded-lg bg-black border border-gray-800 hover:bg-gray-900">
                     <div className="flex items-center gap-3">
                       <div className="w-8 h-8 rounded-full bg-gray-700 flex items-center justify-center">
                         <FileText className="h-4 w-4 text-white" />
@@ -447,7 +448,7 @@ function SuperAdminDashboard({ stats, chartData, recentOrders, topExchangeHouses
                       Config
                     </Badge>
                   </div>
-                  <div className="flex items-center justify-between p-3 rounded-lg bg-gray-900 border border-gray-800">
+                  <div className="flex items-center justify-between p-3 rounded-lg bg-black border border-gray-800 hover:bg-gray-900">
                     <div className="flex items-center gap-3">
                       <div className="w-8 h-8 rounded-full bg-gray-700 flex items-center justify-center">
                         <BarChart3 className="h-4 w-4 text-white" />

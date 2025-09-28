@@ -1,5 +1,4 @@
 import { Head, Link, useForm } from '@inertiajs/react';
-import { PageProps } from '@/types';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -23,7 +22,7 @@ interface ExchangeHouse {
     name: string;
 }
 
-interface Props extends PageProps {
+interface Props {
     exchangeHouses: ExchangeHouse[];
 }
 
@@ -73,7 +72,7 @@ function CreateUser({ exchangeHouses }: Props) {
                         Usuarios
                     </Link>
                     <ChevronRight className="h-4 w-4 text-muted-foreground" />
-                    <span className="px-2 py-1 bg-primary/10 text-primary rounded-md font-medium">
+                    <span className="px-2 py-1 bg-black border border-gray-800 text-gray-300 rounded-md font-medium">
                         Crear Usuario
                     </span>
                 </nav>
@@ -113,13 +112,13 @@ function CreateUser({ exchangeHouses }: Props) {
                 </div>
 
                 {/* Alert */}
-                <div className="flex items-center gap-3 p-4 bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 rounded-lg">
-                    <AlertCircle className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                <div className="flex items-center gap-3 p-4 bg-black border border-blue-800 rounded-lg">
+                    <AlertCircle className="h-5 w-5 text-blue-400" />
                     <div>
-                        <p className="text-sm font-medium text-blue-900 dark:text-blue-100">
+                        <p className="text-sm font-medium text-blue-200">
                             Registro Controlado
                         </p>
-                        <p className="text-sm text-blue-700 dark:text-blue-300">
+                        <p className="text-sm text-blue-300">
                             El registro público está deshabilitado. Solo tú puedes crear nuevas cuentas de usuario.
                         </p>
                     </div>
@@ -264,7 +263,7 @@ function CreateUser({ exchangeHouses }: Props) {
                                 )}
 
                                 {data.role && (
-                                    <div className="p-3 bg-muted/50 rounded-lg">
+                                    <div className="p-3 bg-black border border-gray-800 rounded-lg">
                                         <p className="text-sm font-medium text-muted-foreground mb-1">
                                             Permisos del rol seleccionado:
                                         </p>
