@@ -1,117 +1,66 @@
-import RegisteredUserController from '@/actions/App/Http/Controllers/Auth/RegisteredUserController';
 import { login } from '@/routes';
-import { Form, Head } from '@inertiajs/react';
-import { LoaderCircle } from 'lucide-react';
+import { Head, Link } from '@inertiajs/react';
+import { Building2, Shield, Users } from 'lucide-react';
 
-import InputError from '@/components/input-error';
-import TextLink from '@/components/text-link';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import AuthLayout from '@/layouts/auth-layout';
 
 export default function Register() {
     return (
         <AuthLayout
-            title="Create an account"
-            description="Enter your details below to create your account"
+            title="Acceso por Invitación"
+            description="Kuberafi es una plataforma exclusiva para casas de cambio certificadas"
         >
-            <Head title="Register" />
-            <Form
-                {...RegisteredUserController.store.form()}
-                resetOnSuccess={['password', 'password_confirmation']}
-                disableWhileProcessing
-                className="flex flex-col gap-6"
-            >
-                {({ processing, errors }) => (
-                    <>
-                        <div className="grid gap-6">
-                            <div className="grid gap-2">
-                                <Label htmlFor="name">Name</Label>
-                                <Input
-                                    id="name"
-                                    type="text"
-                                    required
-                                    autoFocus
-                                    tabIndex={1}
-                                    autoComplete="name"
-                                    name="name"
-                                    placeholder="Full name"
-                                />
-                                <InputError
-                                    message={errors.name}
-                                    className="mt-2"
-                                />
-                            </div>
+            <Head title="Acceso Restringido" />
+            
+            <div className="space-y-6">
+                <div className="text-center">
+                    <Shield className="mx-auto h-12 w-12 text-blue-600 dark:text-blue-400" />
+                    <h2 className="mt-4 text-xl font-semibold">Plataforma Restringida</h2>
+                    <p className="mt-2 text-sm text-muted-foreground">
+                        El acceso a Kuberafi está limitado a casas de cambio autorizadas
+                    </p>
+                </div>
 
-                            <div className="grid gap-2">
-                                <Label htmlFor="email">Email address</Label>
-                                <Input
-                                    id="email"
-                                    type="email"
-                                    required
-                                    tabIndex={2}
-                                    autoComplete="email"
-                                    name="email"
-                                    placeholder="email@example.com"
-                                />
-                                <InputError message={errors.email} />
-                            </div>
-
-                            <div className="grid gap-2">
-                                <Label htmlFor="password">Password</Label>
-                                <Input
-                                    id="password"
-                                    type="password"
-                                    required
-                                    tabIndex={3}
-                                    autoComplete="new-password"
-                                    name="password"
-                                    placeholder="Password"
-                                />
-                                <InputError message={errors.password} />
-                            </div>
-
-                            <div className="grid gap-2">
-                                <Label htmlFor="password_confirmation">
-                                    Confirm password
-                                </Label>
-                                <Input
-                                    id="password_confirmation"
-                                    type="password"
-                                    required
-                                    tabIndex={4}
-                                    autoComplete="new-password"
-                                    name="password_confirmation"
-                                    placeholder="Confirm password"
-                                />
-                                <InputError
-                                    message={errors.password_confirmation}
-                                />
-                            </div>
-
-                            <Button
-                                type="submit"
-                                className="mt-2 w-full"
-                                tabIndex={5}
-                                data-test="register-user-button"
-                            >
-                                {processing && (
-                                    <LoaderCircle className="h-4 w-4 animate-spin" />
-                                )}
-                                Create account
-                            </Button>
+                <div className="grid gap-4">
+                    <div className="flex items-start space-x-3 p-4 border rounded-lg">
+                        <Building2 className="h-5 w-5 text-blue-600 mt-0.5" />
+                        <div>
+                            <h3 className="font-medium">Para Casas de Cambio</h3>
+                            <p className="text-sm text-muted-foreground">
+                                Solo empresas registradas y verificadas pueden acceder
+                            </p>
                         </div>
-
-                        <div className="text-center text-sm text-muted-foreground">
-                            Already have an account?{' '}
-                            <TextLink href={login()} tabIndex={6}>
-                                Log in
-                            </TextLink>
+                    </div>
+                    
+                    <div className="flex items-start space-x-3 p-4 border rounded-lg">
+                        <Users className="h-5 w-5 text-blue-600 mt-0.5" />
+                        <div>
+                            <h3 className="font-medium">Usuarios por Invitación</h3>
+                            <p className="text-sm text-muted-foreground">
+                                Los administradores crean cuentas para sus operadores
+                            </p>
                         </div>
-                    </>
-                )}
-            </Form>
+                    </div>
+                </div>
+
+                <div className="space-y-4">
+                    <Button asChild className="w-full">
+                        <Link href={login()}>
+                            Iniciar Sesión
+                        </Link>
+                    </Button>
+                    
+                    <div className="text-center">
+                        <p className="text-sm text-muted-foreground">
+                            ¿Eres una casa de cambio?{' '}
+                            <span className="font-medium">
+                                Contacta a nuestro equipo comercial
+                            </span>
+                        </p>
+                    </div>
+                </div>
+            </div>
         </AuthLayout>
     );
 }
