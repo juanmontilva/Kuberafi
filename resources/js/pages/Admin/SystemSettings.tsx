@@ -1,16 +1,18 @@
-import { Head, useForm } from '@inertiajs/react';
+import { Head, router } from '@inertiajs/react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
 import KuberafiLayout from '@/layouts/kuberafi-layout';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { 
   Settings,
   DollarSign,
   Save,
-  AlertCircle
+  AlertCircle,
+  CheckCircle,
+  XCircle
 } from 'lucide-react';
 
 interface Setting {
@@ -38,7 +40,27 @@ function SystemSettings({ settings }: Props) {
     return initial;
   });
 
-  const { put, processing } = useForm();
+  const [notification, setNotification] = useState<{
+    type: 'success' | 'error' | null;
+    message: string;
+  }>({ type: null, message: '' });
+
+  // Estado de guardado para deshabilitar el botón
+  const [saving, setSaving] = useState(false);
+
+  // Auto-hide notification after 5 seconds
+  useEffect(() => {
+    if (notification.type) {
+      const timer = setTimeout(() => {
+        setNotification({ type: null, message: '' });
+      }, 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [notification]);
+
+  const showNotification = (type: 'success' | 'error', message: string) => {
+    setNotification({ type, message });
+  };
 
   const handleSettingChange = (key: string, value: string) => {
     setLocalSettings(prev => ({
@@ -54,8 +76,60 @@ function SystemSettings({ settings }: Props) {
       type: setting.type
     }));
 
-    put('/admin/settings', {
-      settings: settingsArray
+    console.log('Enviando configuraciones:', settingsArray);
+
+    // Usamos router.put y enviamos los datos explícitamente para evitar problemas de estado asíncrono
+    setSaving(true);
+    router.put('/admin/settings', { settings: settingsArray }, {
+      onSuccess: (page) => {
+        console.log('Configuraciones guardadas exitosamente');
+        showNotification('success', '✅ Configuraciones guardadas exitosamente');
+        
+        // Recargar después de mostrar la notificación
+        setTimeout(() => {
+          window.location.reload();
+        }, 2000);
+      },
+      onError: (errors) => {
+        console.error('Error guardando configuraciones:', errors);
+        showNotification('error', '❌ Error al guardar configuraciones: ' + JSON.stringify(errors));
+      },
+      onFinish: () => setSaving(false),
+    });
+  };
+
+  const handleQuickUpdate = (key: string, newValue: string, type: string) => {
+    console.log(`Quick update: ${key} = ${newValue}`);
+    
+    fetch('/admin/settings/quick-update', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || ''
+      },
+      body: JSON.stringify({
+        key: key,
+        value: newValue,
+        type: type
+      })
+    })
+    .then(response => response.json())
+    .then(data => {
+      console.log('Respuesta quick update:', data);
+      if (data.success) {
+        showNotification('success', `✅ ${key} actualizado a ${data.saved_value}`);
+        // Actualizar el estado local
+        setLocalSettings(prev => ({
+          ...prev,
+          [key]: data.saved_value
+        }));
+      } else {
+        showNotification('error', '❌ Error en actualización rápida');
+      }
+    })
+    .catch(error => {
+      console.error('Error:', error);
+      showNotification('error', '❌ Error de conexión: ' + error.message);
     });
   };
 
@@ -124,6 +198,28 @@ function SystemSettings({ settings }: Props) {
       <Head title="Configuraciones del Sistema" />
       
       <div className="space-y-6">
+        {/* Notification */}
+        {notification.type && (
+          <div className={`fixed top-4 right-4 z-50 flex items-center gap-2 px-4 py-3 rounded-lg shadow-lg transition-all duration-300 ${
+            notification.type === 'success' 
+              ? 'bg-green-500 text-white' 
+              : 'bg-red-500 text-white'
+          }`}>
+            {notification.type === 'success' ? (
+              <CheckCircle className="h-5 w-5" />
+            ) : (
+              <XCircle className="h-5 w-5" />
+            )}
+            <span className="font-medium">{notification.message}</span>
+            <button 
+              onClick={() => setNotification({ type: null, message: '' })}
+              className="ml-2 text-white hover:text-gray-200"
+            >
+              ×
+            </button>
+          </div>
+        )}
+
         <div className="flex justify-between items-start">
           <div>
             <h1 className="text-3xl font-bold tracking-tight">Configuraciones del Sistema</h1>
@@ -131,10 +227,23 @@ function SystemSettings({ settings }: Props) {
               Gestiona las configuraciones globales de la plataforma Kuberafi
             </p>
           </div>
-          <Button onClick={handleSave} disabled={processing}>
-            <Save className="mr-2 h-4 w-4" />
-            {processing ? 'Guardando...' : 'Guardar Cambios'}
-          </Button>
+          <div className="flex gap-2">
+            <Button 
+              onClick={() => {
+                const newRate = prompt('Nueva comisión de plataforma:', localSettings['platform_commission_rate']);
+                if (newRate && newRate !== localSettings['platform_commission_rate']) {
+                  handleQuickUpdate('platform_commission_rate', newRate, 'number');
+                }
+              }}
+              variant="outline"
+            >
+              Prueba Rápida
+            </Button>
+            <Button onClick={handleSave} disabled={saving}>
+              <Save className="mr-2 h-4 w-4" />
+              {saving ? 'Guardando...' : 'Guardar Cambios'}
+            </Button>
+          </div>
         </div>
 
         {/* Configuraciones por categoría */}

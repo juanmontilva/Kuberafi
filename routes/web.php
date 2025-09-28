@@ -18,7 +18,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::get('admin/reports', [App\Http\Controllers\DashboardController::class, 'reports'])->name('admin.reports');
         Route::get('admin/settings', [App\Http\Controllers\SystemSettingsController::class, 'index'])->name('admin.settings');
         Route::put('admin/settings', [App\Http\Controllers\SystemSettingsController::class, 'update'])->name('admin.settings.update');
+        Route::post('admin/settings', [App\Http\Controllers\SystemSettingsController::class, 'update'])->name('admin.settings.update.post');
         Route::put('admin/settings/{key}', [App\Http\Controllers\SystemSettingsController::class, 'updateSingle'])->name('admin.settings.update-single');
+        Route::post('admin/settings/quick-update', [App\Http\Controllers\SystemSettingsController::class, 'quickUpdate'])->name('admin.settings.quick-update');
 
         // Gestión de Pagos de Comisiones
         Route::get('admin/payments', [App\Http\Controllers\CommissionPaymentController::class, 'index'])->name('admin.payments');
@@ -38,6 +40,14 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::get('admin/users/{user}/edit', [App\Http\Controllers\AdminUserController::class, 'edit'])->name('admin.users.edit');
         Route::put('admin/users/{user}', [App\Http\Controllers\AdminUserController::class, 'update'])->name('admin.users.update');
         Route::delete('admin/users/{user}', [App\Http\Controllers\AdminUserController::class, 'destroy'])->name('admin.users.destroy');
+
+        // Ruta temporal para probar configuraciones
+        Route::get('admin/test-settings', function () {
+            $currentRate = \App\Models\SystemSetting::getPlatformCommissionRate();
+            return Inertia::render('Admin/TestSettings', [
+                'currentRate' => $currentRate
+            ]);
+        })->name('admin.test-settings');
     });
 
     // Rutas para Casas de Cambio y Super Admin
