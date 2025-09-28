@@ -282,17 +282,41 @@ function SystemSettings({ settings }: Props) {
         ))}
 
         {/* Información importante */}
-        <Card className="border-orange-200 bg-orange-50">
+        <Card className="bg-black border border-gray-800">
           <CardContent className="pt-6">
-            <div className="flex items-start gap-3">
-              <AlertCircle className="h-5 w-5 text-orange-600 mt-0.5" />
-              <div className="space-y-1">
-                <h3 className="font-medium text-orange-900">Información Importante</h3>
-                <div className="text-sm text-orange-800 space-y-1">
-                  <p>• Los cambios en la <strong>tasa de comisión de la plataforma</strong> se aplicarán a todas las nuevas órdenes.</p>
-                  <p>• Las órdenes existentes mantendrán la tasa de comisión con la que fueron creadas.</p>
-                  <p>• El <strong>modo de mantenimiento</strong> impedirá que las casas de cambio creen nuevas órdenes.</p>
-                  <p>• Los cambios se guardan inmediatamente al hacer clic en "Guardar Cambios".</p>
+            <div className="flex items-start gap-4">
+              <div className="flex-shrink-0">
+                <AlertCircle className="h-5 w-5 text-blue-400" />
+              </div>
+              <div className="space-y-3">
+                <h3 className="font-semibold text-white flex items-center gap-2">
+                  Información Importante
+                </h3>
+                <div className="space-y-2">
+                  <div className="flex items-start gap-2">
+                    <div className="w-1.5 h-1.5 rounded-full bg-blue-400 mt-2 flex-shrink-0"></div>
+                    <p className="text-sm text-gray-300">
+                      Los cambios en la <span className="font-medium text-blue-400">tasa de comisión de la plataforma</span> se aplicarán a todas las nuevas órdenes.
+                    </p>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <div className="w-1.5 h-1.5 rounded-full bg-blue-400 mt-2 flex-shrink-0"></div>
+                    <p className="text-sm text-gray-300">
+                      Las órdenes existentes mantendrán la tasa de comisión con la que fueron creadas.
+                    </p>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <div className="w-1.5 h-1.5 rounded-full bg-blue-400 mt-2 flex-shrink-0"></div>
+                    <p className="text-sm text-gray-300">
+                      El <span className="font-medium text-blue-400">modo de mantenimiento</span> impedirá que las casas de cambio creen nuevas órdenes.
+                    </p>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <div className="w-1.5 h-1.5 rounded-full bg-blue-400 mt-2 flex-shrink-0"></div>
+                    <p className="text-sm text-gray-300">
+                      Los cambios se guardan inmediatamente al hacer clic en <span className="font-medium text-blue-400">"Guardar Cambios"</span>.
+                    </p>
+                  </div>
                 </div>
               </div>
             </div>
