@@ -22,6 +22,10 @@ class User extends Authenticatable
         'name',
         'email',
         'password',
+        'role',
+        'exchange_house_id',
+        'is_active',
+        'last_login_at',
     ];
 
     /**
@@ -44,6 +48,33 @@ class User extends Authenticatable
         return [
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
+            'is_active' => 'boolean',
+            'last_login_at' => 'datetime',
         ];
+    }
+
+    public function exchangeHouse()
+    {
+        return $this->belongsTo(ExchangeHouse::class);
+    }
+
+    public function orders()
+    {
+        return $this->hasMany(Order::class);
+    }
+
+    public function isSuperAdmin()
+    {
+        return $this->role === 'super_admin';
+    }
+
+    public function isExchangeHouse()
+    {
+        return $this->role === 'exchange_house';
+    }
+
+    public function isOperator()
+    {
+        return $this->role === 'operator';
     }
 }
