@@ -137,7 +137,6 @@ function AdminExchangeHouses({ exchangeHouses }: Props) {
                           <DollarSign className="h-3 w-3" />
                           {house.orders_count} órdenes
                         </span>
-                        <span>Comisión: {house.commission_rate}%</span>
                       </div>
                     </div>
                     

@@ -22,7 +22,8 @@ import {
     Building2,
     Users,
     BarChart3,
-    Settings
+    Settings,
+    ArrowLeftRight
 } from 'lucide-react';
 import AppLogo from './app-logo';
 
@@ -40,6 +41,11 @@ export function KuberafiSidebar() {
             title: 'Todas las Órdenes',
             href: '/orders',
             icon: TrendingUp,
+        },
+        {
+            title: 'Pares de Divisas',
+            href: '/admin/currency-pairs',
+            icon: ArrowLeftRight,
         },
         {
             title: 'Gestión de Pagos',
@@ -89,6 +95,11 @@ export function KuberafiSidebar() {
             title: 'Nueva Orden',
             href: '/orders/create',
             icon: DollarSign,
+        },
+        {
+            title: 'Pares',
+            href: '/currency-pairs',
+            icon: ArrowLeftRight,
         },
         {
             title: 'Mis Comisiones',

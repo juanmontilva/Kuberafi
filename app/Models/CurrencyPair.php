@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 
 class CurrencyPair extends Model
 {
@@ -27,6 +28,13 @@ class CurrencyPair extends Model
     public function orders(): HasMany
     {
         return $this->hasMany(Order::class);
+    }
+
+    public function exchangeHouses(): BelongsToMany
+    {
+        return $this->belongsToMany(ExchangeHouse::class, 'exchange_house_currency_pair')
+            ->withPivot(['margin_percent', 'min_amount', 'max_amount', 'is_active'])
+            ->withTimestamps();
     }
 
     public function calculateQuoteAmount($baseAmount, $marginPercent = 0)

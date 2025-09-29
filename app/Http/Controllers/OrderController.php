@@ -156,6 +156,40 @@ class OrderController extends Controller
         return back()->with('success', 'Orden actualizada exitosamente');
     }
 
+    public function complete(Request $request, Order $order)
+    {
+        $user = $request->user();
+        
+        // Solo la casa de cambio propietaria puede completar
+        if (!$user->isSuperAdmin() && $user->exchange_house_id !== $order->exchange_house_id) {
+            abort(403);
+        }
+        
+        $validated = $request->validate([
+            'actual_rate' => 'required|numeric|min:0',
+            'actual_margin_percent' => 'required|numeric',
+            'notes' => 'nullable|string|max:1000',
+        ]);
+        
+        DB::transaction(function () use ($order, $validated) {
+            // Actualizar orden con datos reales
+            $order->update([
+                'actual_margin_percent' => $validated['actual_margin_percent'],
+                'status' => 'completed',
+                'completed_at' => now(),
+                'notes' => $validated['notes'] ?? $order->notes,
+            ]);
+            
+            // Calcular comisiones finales si no se hicieron antes
+            if (!$order->commissions()->exists()) {
+                Commission::createFromOrder($order);
+            }
+        });
+        
+        return redirect()->back()
+            ->with('success', 'Orden completada exitosamente. Margen real: ' . $validated['actual_margin_percent'] . '%');
+    }
+
     public function destroy(Order $order)
     {
         $user = request()->user();

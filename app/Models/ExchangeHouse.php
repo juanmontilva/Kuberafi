@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 
 class ExchangeHouse extends Model
 {
@@ -45,6 +46,18 @@ class ExchangeHouse extends Model
     public function commissionPayments(): HasMany
     {
         return $this->hasMany(CommissionPayment::class);
+    }
+
+    public function currencyPairs(): BelongsToMany
+    {
+        return $this->belongsToMany(CurrencyPair::class, 'exchange_house_currency_pair')
+            ->withPivot(['margin_percent', 'min_amount', 'max_amount', 'is_active'])
+            ->withTimestamps();
+    }
+
+    public function activeCurrencyPairs(): BelongsToMany
+    {
+        return $this->currencyPairs()->wherePivot('is_active', true);
     }
 
     public function paymentSchedule()

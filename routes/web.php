@@ -48,6 +48,13 @@ Route::middleware(['auth', 'verified'])->group(function () {
                 'currentRate' => $currentRate
             ]);
         })->name('admin.test-settings');
+
+        // Gestión de Pares de Divisas (Super Admin)
+        Route::get('admin/currency-pairs', [App\Http\Controllers\Admin\CurrencyPairController::class, 'index'])->name('admin.currency-pairs');
+        Route::post('admin/currency-pairs', [App\Http\Controllers\Admin\CurrencyPairController::class, 'store'])->name('admin.currency-pairs.store');
+        Route::put('admin/currency-pairs/{currencyPair}', [App\Http\Controllers\Admin\CurrencyPairController::class, 'update'])->name('admin.currency-pairs.update');
+        Route::delete('admin/currency-pairs/{currencyPair}', [App\Http\Controllers\Admin\CurrencyPairController::class, 'destroy'])->name('admin.currency-pairs.destroy');
+        Route::post('admin/currency-pairs/{currencyPair}/toggle', [App\Http\Controllers\Admin\CurrencyPairController::class, 'toggleActive'])->name('admin.currency-pairs.toggle');
     });
 
     // Rutas para Casas de Cambio y Super Admin
@@ -56,11 +63,19 @@ Route::middleware(['auth', 'verified'])->group(function () {
             ->middleware('rate.limit.orders')->only(['store']);
         Route::resource('orders', App\Http\Controllers\OrderController::class)
             ->except(['store']);
+        Route::post('orders/{order}/complete', [App\Http\Controllers\OrderController::class, 'complete'])->name('orders.complete');
     });
 
     // Rutas solo para Casas de Cambio y Operadores
     Route::middleware(['role:exchange_house,operator'])->group(function () {
         Route::get('my-commissions', [App\Http\Controllers\DashboardController::class, 'myCommissions'])->name('my.commissions');
+        
+        // Gestión de Pares (Casas de Cambio)
+        Route::get('currency-pairs', [App\Http\Controllers\ExchangeHouse\CurrencyPairController::class, 'index'])->name('currency-pairs');
+        Route::post('currency-pairs/{currencyPair}/attach', [App\Http\Controllers\ExchangeHouse\CurrencyPairController::class, 'attach'])->name('currency-pairs.attach');
+        Route::put('currency-pairs/{currencyPair}', [App\Http\Controllers\ExchangeHouse\CurrencyPairController::class, 'update'])->name('currency-pairs.update');
+        Route::post('currency-pairs/{currencyPair}/toggle', [App\Http\Controllers\ExchangeHouse\CurrencyPairController::class, 'toggleActive'])->name('currency-pairs.toggle');
+        Route::delete('currency-pairs/{currencyPair}', [App\Http\Controllers\ExchangeHouse\CurrencyPairController::class, 'detach'])->name('currency-pairs.detach');
     });
 });
 
