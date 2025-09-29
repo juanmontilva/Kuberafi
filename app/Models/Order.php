@@ -20,8 +20,11 @@ class Order extends Model
         'applied_rate',
         'expected_margin_percent',
         'actual_margin_percent',
+        'house_commission_percent',
+        'house_commission_amount',
         'platform_commission',
         'exchange_commission',
+        'net_amount',
         'status',
         'completed_at',
         'notes',
@@ -34,8 +37,11 @@ class Order extends Model
         'applied_rate' => 'decimal:6',
         'expected_margin_percent' => 'decimal:2',
         'actual_margin_percent' => 'decimal:2',
+        'house_commission_percent' => 'decimal:2',
+        'house_commission_amount' => 'decimal:2',
         'platform_commission' => 'decimal:2',
         'exchange_commission' => 'decimal:2',
+        'net_amount' => 'decimal:2',
         'completed_at' => 'datetime',
     ];
 
@@ -61,21 +67,31 @@ class Order extends Model
 
     public function calculateCommissions()
     {
-        // Comisión de la plataforma (configurable)
+        // Comisión total de la casa (ej: 5% = $50 de $1000)
+        $houseCommissionAmount = $this->base_amount * ($this->house_commission_percent / 100);
+        
+        // Comisión de la plataforma (ej: 0.16% = $1.60 de $1000)
         $platformRate = SystemSetting::getPlatformCommissionRate() / 100;
         $platformCommission = $this->base_amount * $platformRate;
         
-        // Comisión de la casa de cambio (según su configuración)
-        $exchangeCommission = $this->base_amount * ($this->exchangeHouse->commission_rate / 100);
+        // Ganancia neta de la casa = Comisión total - Comisión plataforma
+        $exchangeCommission = $houseCommissionAmount - $platformCommission;
+        
+        // Monto neto que recibe el cliente
+        $netAmount = $this->base_amount - $houseCommissionAmount;
 
         $this->update([
+            'house_commission_amount' => $houseCommissionAmount,
             'platform_commission' => $platformCommission,
             'exchange_commission' => $exchangeCommission,
+            'net_amount' => $netAmount,
         ]);
 
         return [
+            'house_total' => $houseCommissionAmount,
             'platform' => $platformCommission,
-            'exchange' => $exchangeCommission,
+            'exchange_net' => $exchangeCommission,
+            'client_receives' => $netAmount,
         ];
     }
 

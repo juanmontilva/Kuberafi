@@ -51,9 +51,11 @@ class OrderController extends Controller
         }
         
         $currencyPairs = CurrencyPair::where('is_active', true)->get();
+        $platformCommissionRate = \App\Models\SystemSetting::getPlatformCommissionRate();
         
         return Inertia::render('Orders/Create', [
             'currencyPairs' => $currencyPairs,
+            'platformCommissionRate' => $platformCommissionRate,
         ]);
     }
 
@@ -68,7 +70,7 @@ class OrderController extends Controller
         $validated = $request->validate([
             'currency_pair_id' => 'required|exists:currency_pairs,id',
             'base_amount' => 'required|numeric|min:0.01',
-            'expected_margin_percent' => 'required|numeric|min:0|max:100',
+            'house_commission_percent' => 'required|numeric|min:0|max:100',
             'notes' => 'nullable|string|max:1000',
         ]);
         
@@ -88,20 +90,38 @@ class OrderController extends Controller
         }
         
         $order = DB::transaction(function () use ($validated, $currencyPair, $user) {
-            // Calcular tasa aplicada con margen
-            $appliedRate = $currencyPair->current_rate * (1 + ($validated['expected_margin_percent'] / 100));
-            $quoteAmount = $validated['base_amount'] * $appliedRate;
+            // Calcular comisiones
+            $baseAmount = $validated['base_amount'];
+            $houseCommissionPercent = $validated['house_commission_percent'];
+            $houseCommissionAmount = $baseAmount * ($houseCommissionPercent / 100);
             
-            // Crear la orden (rápido, sin comisiones)
+            // Comisión de plataforma
+            $platformRate = \App\Models\SystemSetting::getPlatformCommissionRate() / 100;
+            $platformCommission = $baseAmount * $platformRate;
+            
+            // Ganancia neta de la casa
+            $exchangeCommission = $houseCommissionAmount - $platformCommission;
+            
+            // Monto neto que recibe el cliente
+            $netAmount = $baseAmount - $houseCommissionAmount;
+            
+            // Calcular quote amount (bolívares que recibe)
+            $quoteAmount = $netAmount * $currencyPair->current_rate;
+            
+            // Crear la orden
             return Order::create([
                 'exchange_house_id' => $user->exchange_house_id,
                 'currency_pair_id' => $validated['currency_pair_id'],
                 'user_id' => $user->id,
-                'base_amount' => $validated['base_amount'],
+                'base_amount' => $baseAmount,
                 'quote_amount' => $quoteAmount,
                 'market_rate' => $currencyPair->current_rate,
-                'applied_rate' => $appliedRate,
-                'expected_margin_percent' => $validated['expected_margin_percent'],
+                'applied_rate' => $currencyPair->current_rate,
+                'house_commission_percent' => $houseCommissionPercent,
+                'house_commission_amount' => $houseCommissionAmount,
+                'platform_commission' => $platformCommission,
+                'exchange_commission' => $exchangeCommission,
+                'net_amount' => $netAmount,
                 'status' => 'pending',
                 'notes' => $validated['notes'] ?? null,
             ]);

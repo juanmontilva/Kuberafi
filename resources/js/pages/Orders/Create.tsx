@@ -25,35 +25,38 @@ interface CurrencyPair {
 
 interface Props {
   currencyPairs: CurrencyPair[];
+  platformCommissionRate: number;
 }
 
-function CreateOrder({ currencyPairs }: Props) {
+function CreateOrder({ currencyPairs, platformCommissionRate }: Props) {
   const [selectedPair, setSelectedPair] = useState<CurrencyPair | null>(null);
   const [calculatedQuote, setCalculatedQuote] = useState<number>(0);
 
   const { data, setData, post, processing, errors } = useForm({
     currency_pair_id: '',
     base_amount: '',
-    expected_margin_percent: '3.0',
+    house_commission_percent: '5.0',
     notes: '',
   });
 
-  // Calcular el monto de cotización cuando cambian los valores
+  // Calcular el monto que recibirá el cliente
   useEffect(() => {
-    if (selectedPair && data.base_amount && data.expected_margin_percent) {
+    if (selectedPair && data.base_amount && data.house_commission_percent) {
       const baseAmount = parseFloat(data.base_amount);
-      const marginPercent = parseFloat(data.expected_margin_percent);
+      const commissionPercent = parseFloat(data.house_commission_percent);
       const currentRate = parseFloat(selectedPair.current_rate);
       
-      if (!isNaN(baseAmount) && !isNaN(marginPercent) && !isNaN(currentRate)) {
-        const appliedRate = currentRate * (1 + (marginPercent / 100));
-        const quoteAmount = baseAmount * appliedRate;
+      if (!isNaN(baseAmount) && !isNaN(commissionPercent) && !isNaN(currentRate)) {
+        // Monto neto que recibe el cliente = Monto - Comisión
+        const commissionAmount = baseAmount * (commissionPercent / 100);
+        const netAmount = baseAmount - commissionAmount;
+        const quoteAmount = netAmount * currentRate;
         setCalculatedQuote(quoteAmount);
       }
     } else {
       setCalculatedQuote(0);
     }
-  }, [selectedPair, data.base_amount, data.expected_margin_percent]);
+  }, [selectedPair, data.base_amount, data.house_commission_percent]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -138,19 +141,19 @@ function CreateOrder({ currencyPairs }: Props) {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="expected_margin_percent">Margen Esperado (%)</Label>
+                  <Label htmlFor="house_commission_percent">Comisión (%)</Label>
                   <Input
-                    id="expected_margin_percent"
+                    id="house_commission_percent"
                     type="number"
                     step="0.1"
                     min="0"
                     max="100"
-                    value={data.expected_margin_percent}
-                    onChange={(e) => setData('expected_margin_percent', e.target.value)}
-                    placeholder="Ej: 3.5"
+                    value={data.house_commission_percent}
+                    onChange={(e) => setData('house_commission_percent', e.target.value)}
+                    placeholder="Ej: 5.0"
                   />
-                  {errors.expected_margin_percent && (
-                    <p className="text-sm text-red-600">{errors.expected_margin_percent}</p>
+                  {errors.house_commission_percent && (
+                    <p className="text-sm text-red-600">{errors.house_commission_percent}</p>
                   )}
                 </div>
 
@@ -192,7 +195,7 @@ function CreateOrder({ currencyPairs }: Props) {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              {selectedPair && data.base_amount && data.expected_margin_percent ? (
+              {selectedPair && data.base_amount && data.house_commission_percent ? (
                 <div className="space-y-4">
                   <div className="text-center">
                     <div className="text-2xl font-bold">
@@ -206,25 +209,42 @@ function CreateOrder({ currencyPairs }: Props) {
 
                   <div className="space-y-2 text-sm">
                     <div className="flex justify-between">
-                      <span className="text-muted-foreground">Tasa de mercado:</span>
-                      <span>{parseFloat(selectedPair.current_rate).toFixed(6)}</span>
+                      <span className="text-muted-foreground">Monto cliente:</span>
+                      <span>${parseFloat(data.base_amount).toFixed(2)}</span>
+                    </div>
+                    
+                    {/* Desglose de Comisión */}
+                    <div className="bg-red-50 border border-red-200 rounded p-2 space-y-1">
+                      <div className="flex justify-between text-red-600 font-medium">
+                        <span>Comisión Total ({data.house_commission_percent}%):</span>
+                        <span>-${(parseFloat(data.base_amount) * parseFloat(data.house_commission_percent) / 100).toFixed(2)}</span>
+                      </div>
+                      <div className="flex justify-between text-xs text-red-700 pl-4">
+                        <span>↳ KuberaFi ({platformCommissionRate}%):</span>
+                        <span>${(parseFloat(data.base_amount) * platformCommissionRate / 100).toFixed(2)}</span>
+                      </div>
+                      <div className="flex justify-between text-xs text-green-700 pl-4">
+                        <span>↳ Tu ganancia neta:</span>
+                        <span>${((parseFloat(data.base_amount) * parseFloat(data.house_commission_percent) / 100) - (parseFloat(data.base_amount) * platformCommissionRate / 100)).toFixed(2)}</span>
+                      </div>
+                    </div>
+                    
+                    <div className="flex justify-between font-medium border-t pt-2">
+                      <span className="text-muted-foreground">Monto a cambiar:</span>
+                      <span className="font-bold">
+                        ${(parseFloat(data.base_amount) - (parseFloat(data.base_amount) * parseFloat(data.house_commission_percent) / 100)).toFixed(2)}
+                      </span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-muted-foreground">Margen aplicado:</span>
-                      <span>{data.expected_margin_percent}%</span>
-                    </div>
-                    <div className="flex justify-between font-medium">
-                      <span className="text-muted-foreground">Tasa final:</span>
-                      <span>
-                        {(parseFloat(selectedPair.current_rate) * (1 + (parseFloat(data.expected_margin_percent) / 100))).toFixed(6)}
-                      </span>
+                      <span className="text-muted-foreground">Tasa:</span>
+                      <span>{parseFloat(selectedPair.current_rate).toFixed(4)}</span>
                     </div>
                   </div>
 
                   <div className="p-3 bg-green-50 rounded-lg border border-green-200">
-                    <p className="text-sm text-green-800">
-                      <strong>Ganancia estimada:</strong> {' '}
-                      {(calculatedQuote - (parseFloat(data.base_amount) * parseFloat(selectedPair.current_rate))).toFixed(2)} {selectedPair.quote_currency}
+                    <p className="text-sm text-green-800 text-center">
+                      <strong>Cliente recibe:</strong><br />
+                      <span className="text-2xl font-bold">{calculatedQuote.toFixed(2)} {selectedPair.quote_currency}</span>
                     </p>
                   </div>
                 </div>
