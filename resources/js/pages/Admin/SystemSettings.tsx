@@ -84,11 +84,6 @@ function SystemSettings({ settings }: Props) {
       onSuccess: (page) => {
         console.log('Configuraciones guardadas exitosamente');
         showNotification('success', '✅ Configuraciones guardadas exitosamente');
-        
-        // Recargar después de mostrar la notificación
-        setTimeout(() => {
-          window.location.reload();
-        }, 2000);
       },
       onError: (errors) => {
         console.error('Error guardando configuraciones:', errors);
