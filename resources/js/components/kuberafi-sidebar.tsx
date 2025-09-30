@@ -23,7 +23,8 @@ import {
     Users,
     BarChart3,
     Settings,
-    ArrowLeftRight
+    ArrowLeftRight,
+    CreditCard
 } from 'lucide-react';
 import AppLogo from './app-logo';
 
@@ -100,6 +101,11 @@ export function KuberafiSidebar() {
             title: 'Pares',
             href: '/currency-pairs',
             icon: ArrowLeftRight,
+        },
+        {
+            title: 'Métodos de Pago',
+            href: '/payment-methods',
+            icon: CreditCard,
         },
         {
             title: 'Mis Comisiones',

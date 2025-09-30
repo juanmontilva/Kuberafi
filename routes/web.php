@@ -70,12 +70,19 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::middleware(['role:exchange_house,operator'])->group(function () {
         Route::get('my-commissions', [App\Http\Controllers\DashboardController::class, 'myCommissions'])->name('my.commissions');
         
-        // Gestión de Pares (Casas de Cambio)
-        Route::get('currency-pairs', [App\Http\Controllers\ExchangeHouse\CurrencyPairController::class, 'index'])->name('currency-pairs');
-        Route::post('currency-pairs/{currencyPair}/attach', [App\Http\Controllers\ExchangeHouse\CurrencyPairController::class, 'attach'])->name('currency-pairs.attach');
-        Route::put('currency-pairs/{currencyPair}', [App\Http\Controllers\ExchangeHouse\CurrencyPairController::class, 'update'])->name('currency-pairs.update');
-        Route::post('currency-pairs/{currencyPair}/toggle', [App\Http\Controllers\ExchangeHouse\CurrencyPairController::class, 'toggleActive'])->name('currency-pairs.toggle');
-        Route::delete('currency-pairs/{currencyPair}', [App\Http\Controllers\ExchangeHouse\CurrencyPairController::class, 'detach'])->name('currency-pairs.detach');
+        // Currency Pairs para casas de cambio
+        Route::get('/currency-pairs', [App\Http\Controllers\ExchangeHouse\CurrencyPairController::class, 'index'])->name('currency-pairs.index');
+        Route::post('/currency-pairs/{currencyPair}/attach', [App\Http\Controllers\ExchangeHouse\CurrencyPairController::class, 'attach'])->name('currency-pairs.attach');
+        Route::put('/currency-pairs/{currencyPair}', [App\Http\Controllers\ExchangeHouse\CurrencyPairController::class, 'update'])->name('currency-pairs.update');
+        Route::delete('/currency-pairs/{currencyPair}/detach', [App\Http\Controllers\ExchangeHouse\CurrencyPairController::class, 'detach'])->name('currency-pairs.detach');
+        Route::post('/currency-pairs/{currencyPair}/toggle', [App\Http\Controllers\ExchangeHouse\CurrencyPairController::class, 'toggle'])->name('currency-pairs.toggle');
+        
+        // Payment Methods para casas de cambio
+        Route::get('/payment-methods', [App\Http\Controllers\ExchangeHouse\PaymentMethodController::class, 'index'])->name('payment-methods.index');
+        Route::post('/payment-methods', [App\Http\Controllers\ExchangeHouse\PaymentMethodController::class, 'store'])->name('payment-methods.store');
+        Route::put('/payment-methods/{paymentMethod}', [App\Http\Controllers\ExchangeHouse\PaymentMethodController::class, 'update'])->name('payment-methods.update');
+        Route::delete('/payment-methods/{paymentMethod}', [App\Http\Controllers\ExchangeHouse\PaymentMethodController::class, 'destroy'])->name('payment-methods.destroy');
+        Route::post('/payment-methods/{paymentMethod}/toggle', [App\Http\Controllers\ExchangeHouse\PaymentMethodController::class, 'toggle'])->name('payment-methods.toggle');
     });
 });
 

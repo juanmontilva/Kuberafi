@@ -13,6 +13,7 @@ class Order extends Model
         'order_number',
         'exchange_house_id',
         'currency_pair_id',
+        'payment_method_id',
         'user_id',
         'base_amount',
         'quote_amount',
@@ -58,6 +59,11 @@ class Order extends Model
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
+    }
+
+    public function paymentMethod(): BelongsTo
+    {
+        return $this->belongsTo(PaymentMethod::class);
     }
 
     public function commissions(): HasMany

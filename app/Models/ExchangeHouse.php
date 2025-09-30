@@ -43,6 +43,11 @@ class ExchangeHouse extends Model
         return $this->hasMany(Commission::class);
     }
 
+    public function paymentMethods(): HasMany
+    {
+        return $this->hasMany(PaymentMethod::class);
+    }
+
     public function commissionPayments(): HasMany
     {
         return $this->hasMany(CommissionPayment::class);

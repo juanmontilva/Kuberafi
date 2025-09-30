@@ -181,16 +181,44 @@ class DashboardController extends Controller
         $exchangeHouse = $user->exchangeHouse;
         $today = Carbon::today();
         $thisMonth = Carbon::now()->startOfMonth();
+        $last24h = Carbon::now()->subHours(24);
         
-        // Estadísticas de la casa de cambio
+        // Métricas estilo Binance - Últimas 24h
+        $orders24h = $exchangeHouse->orders()->where('created_at', '>=', $last24h)->get();
+        $volume24h = $orders24h->sum('base_amount');
+        $profit24h = $orders24h->sum('exchange_commission');
+        $platformFee24h = $orders24h->sum('platform_commission');
+        
+        // Métricas del mes
+        $ordersMonth = $exchangeHouse->orders()->where('created_at', '>=', $thisMonth)->get();
+        $volumeMonth = $ordersMonth->sum('base_amount');
+        $profitMonth = $ordersMonth->sum('exchange_commission');
+        $platformFeeMonth = $ordersMonth->sum('platform_commission');
+        
+        // Métricas de hoy
         $ordersToday = $exchangeHouse->orders()->whereDate('created_at', $today)->count();
         $volumeToday = $exchangeHouse->orders()->whereDate('created_at', $today)->sum('base_amount');
-        $commissionsMonth = $exchangeHouse->commissions()
-            ->where('type', 'exchange_house')
-            ->where('created_at', '>=', $thisMonth)
-            ->sum('amount');
+        
+        // Top pares de divisas (mejor rendimiento)
+        $topPairs = $exchangeHouse->orders()
+            ->where('status', 'completed')
+            ->selectRaw('currency_pair_id, COUNT(*) as total_orders, SUM(base_amount) as total_volume, SUM(exchange_commission) as total_profit')
+            ->groupBy('currency_pair_id')
+            ->orderByDesc('total_profit')
+            ->limit(5)
+            ->with('currencyPair')
+            ->get();
+        
+        // Gráfica de ganancias (últimos 7 días)
+        $profitChart = $exchangeHouse->orders()
+            ->where('status', 'completed')
+            ->where('created_at', '>=', Carbon::now()->subDays(7))
+            ->selectRaw('DATE(created_at) as date, SUM(exchange_commission) as profit, SUM(base_amount) as volume, COUNT(*) as orders')
+            ->groupBy('date')
+            ->orderBy('date')
+            ->get();
 
-        // Órdenes recientes de la casa de cambio
+        // Órdenes recientes
         $recentOrders = $exchangeHouse->orders()
             ->with(['currencyPair', 'user'])
             ->orderBy('created_at', 'desc')
@@ -203,11 +231,29 @@ class DashboardController extends Controller
         return Inertia::render('Dashboard/ExchangeHouse', [
             'exchangeHouse' => $exchangeHouse,
             'stats' => [
+                // 24 horas
+                'volume24h' => number_format($volume24h, 2),
+                'profit24h' => number_format($profit24h, 2),
+                'orders24h' => $orders24h->count(),
+                'platformFee24h' => number_format($platformFee24h, 2),
+                
+                // Mes actual
+                'volumeMonth' => number_format($volumeMonth, 2),
+                'profitMonth' => number_format($profitMonth, 2),
+                'ordersMonth' => $ordersMonth->count(),
+                'platformFeeMonth' => number_format($platformFeeMonth, 2),
+                
+                // Hoy
                 'ordersToday' => $ordersToday,
                 'volumeToday' => number_format($volumeToday, 2),
-                'commissionsMonth' => number_format($commissionsMonth, 2),
                 'dailyLimitUsed' => number_format(($volumeToday / $exchangeHouse->daily_limit) * 100, 1),
+                
+                // Promedios
+                'avgCommissionPercent' => $ordersMonth->count() > 0 ? number_format($ordersMonth->avg('house_commission_percent'), 2) : '0.00',
+                'avgProfitPerOrder' => $ordersMonth->count() > 0 ? number_format($profitMonth / $ordersMonth->count(), 2) : '0.00',
             ],
+            'topPairs' => $topPairs,
+            'profitChart' => $profitChart,
             'recentOrders' => $recentOrders,
             'currencyPairs' => $currencyPairs,
         ]);
