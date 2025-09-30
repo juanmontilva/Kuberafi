@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import KuberafiLayout from '@/layouts/kuberafi-layout';
+import { CurrencyPairRateHistory } from '@/components/CurrencyPairRateHistory';
 import { useState } from 'react';
 import { 
   DollarSign,
@@ -15,7 +16,8 @@ import {
   ToggleRight,
   TrendingUp,
   AlertCircle,
-  Percent
+  Percent,
+  History
 } from 'lucide-react';
 
 interface CurrencyPair {
@@ -52,7 +54,9 @@ function CurrencyPairs({ activePairs, availablePairs, exchangeHouse, platformCom
   const [showAddForm, setShowAddForm] = useState(false);
   const [selectedPair, setSelectedPair] = useState<CurrencyPair | null>(null);
   const [editingPair, setEditingPair] = useState<CurrencyPair | null>(null);
+  const [historyPair, setHistoryPair] = useState<{ id: number; symbol: string } | null>(null);
   const [formData, setFormData] = useState({
+    current_rate: '',
     margin_percent: '',
     min_amount: '',
     max_amount: '',
@@ -66,7 +70,7 @@ function CurrencyPairs({ activePairs, availablePairs, exchangeHouse, platformCom
       onSuccess: () => {
         setShowAddForm(false);
         setSelectedPair(null);
-        setFormData({ margin_percent: '', min_amount: '', max_amount: '' });
+        setFormData({ current_rate: '', margin_percent: '', min_amount: '', max_amount: '' });
       }
     });
   };
@@ -95,6 +99,7 @@ function CurrencyPairs({ activePairs, availablePairs, exchangeHouse, platformCom
   const startAdd = (pair: CurrencyPair) => {
     setSelectedPair(pair);
     setFormData({
+      current_rate: pair.current_rate || '',
       margin_percent: '',
       min_amount: pair.min_amount || '',
       max_amount: pair.max_amount || '',
@@ -105,6 +110,7 @@ function CurrencyPairs({ activePairs, availablePairs, exchangeHouse, platformCom
   const startEdit = (pair: CurrencyPair) => {
     setEditingPair(pair);
     setFormData({
+      current_rate: pair.current_rate || '',
       margin_percent: pair.pivot?.margin_percent || '',
       min_amount: pair.pivot?.min_amount || '',
       max_amount: pair.pivot?.max_amount || '',
@@ -218,6 +224,14 @@ function CurrencyPairs({ activePairs, availablePairs, exchangeHouse, platformCom
                         </Badge>
                       </div>
                       <div className="flex items-center gap-2">
+                        <Button 
+                          size="sm" 
+                          variant="outline" 
+                          onClick={() => setHistoryPair({ id: pair.id, symbol: pair.symbol })}
+                          title="Ver historial de tasas"
+                        >
+                          <History className="h-4 w-4 text-blue-400" />
+                        </Button>
                         <Button size="sm" variant="outline" onClick={() => startEdit(pair)}>
                           <Edit className="h-4 w-4" />
                         </Button>
@@ -374,8 +388,22 @@ function CurrencyPairs({ activePairs, availablePairs, exchangeHouse, platformCom
               </CardHeader>
               <CardContent>
                 <form onSubmit={handleUpdate} className="space-y-4">
+                  <div className="p-3 bg-blue-950/50 border border-blue-800 rounded-lg">
+                    <Label className="text-blue-400 font-semibold">Tasa Base del Par*</Label>
+                    <Input
+                      type="number"
+                      step="0.00000001"
+                      value={formData.current_rate}
+                      onChange={(e) => setFormData({...formData, current_rate: e.target.value})}
+                      required
+                      className="mt-1 bg-black border-blue-700"
+                    />
+                    <p className="text-xs text-blue-300 mt-2">
+                      💵 Esta es la tasa del mercado (ej: 390.00 VES por 1 USD)
+                    </p>
+                  </div>
                   <div>
-                    <Label>Margen de Ganancia (%)*</Label>
+                    <Label>Tu Margen de Ganancia (%)*</Label>
                     <Input
                       type="number"
                       step="0.01"
@@ -384,7 +412,7 @@ function CurrencyPairs({ activePairs, availablePairs, exchangeHouse, platformCom
                       required
                     />
                     <p className="text-xs text-muted-foreground mt-1">
-                      Tasa efectiva: {calculateEffectiveRate(editingPair.current_rate, formData.margin_percent)}
+                      Tasa efectiva: {calculateEffectiveRate(formData.current_rate || editingPair.current_rate, formData.margin_percent)}
                     </p>
                   </div>
                   <div className="grid grid-cols-2 gap-4">
@@ -417,6 +445,16 @@ function CurrencyPairs({ activePairs, availablePairs, exchangeHouse, platformCom
               </CardContent>
             </Card>
           </div>
+        )}
+
+        {/* Modal de Historial de Tasas */}
+        {historyPair && (
+          <CurrencyPairRateHistory
+            currencyPairId={historyPair.id}
+            symbol={historyPair.symbol}
+            open={!!historyPair}
+            onClose={() => setHistoryPair(null)}
+          />
         )}
       </div>
     </>

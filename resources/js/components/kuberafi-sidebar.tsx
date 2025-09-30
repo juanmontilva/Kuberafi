@@ -108,6 +108,16 @@ export function KuberafiSidebar() {
             icon: CreditCard,
         },
         {
+            title: 'Mis Clientes',
+            href: '/customers',
+            icon: Users,
+        },
+        {
+            title: 'Soporte',
+            href: '/tickets',
+            icon: FileText,
+        },
+        {
             title: 'Mis Comisiones',
             href: '/my-commissions',
             icon: FileText,

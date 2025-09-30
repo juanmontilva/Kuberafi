@@ -44,6 +44,7 @@ class CurrencyPairController extends Controller
         ]);
 
         $exchangeHouse = request()->user()->exchangeHouse;
+        $user = request()->user();
 
         // Verificar que el par no esté ya asignado
         if ($exchangeHouse->currencyPairs()->where('currency_pair_id', $currencyPair->id)->exists()) {
@@ -57,20 +58,79 @@ class CurrencyPairController extends Controller
             'is_active' => true,
         ]);
 
+        // Guardar en el historial la tasa inicial
+        $currencyPair->saveRateChange(
+            exchangeHouseId: $exchangeHouse->id,
+            newRate: $currencyPair->current_rate,
+            marginPercent: $validated['margin_percent'],
+            userId: $user->id,
+            reason: 'initial',
+            notes: 'Configuración inicial del par'
+        );
+
         return redirect()->back()->with('success', "Par {$currencyPair->symbol} agregado exitosamente");
     }
 
     public function update(Request $request, CurrencyPair $currencyPair)
     {
         $validated = $request->validate([
+            'current_rate' => 'required|numeric|min:0',
             'margin_percent' => 'required|numeric|min:0|max:100',
             'min_amount' => 'nullable|numeric|min:0',
             'max_amount' => 'nullable|numeric|min:0',
         ]);
 
         $exchangeHouse = request()->user()->exchangeHouse;
+        $user = request()->user();
 
-        $exchangeHouse->currencyPairs()->updateExistingPivot($currencyPair->id, $validated);
+        // Obtener configuración actual antes de actualizar
+        $currentPivot = $exchangeHouse->currencyPairs()
+            ->where('currency_pair_id', $currencyPair->id)
+            ->first();
+
+        // Variables para determinar qué cambió
+        $rateChanged = $currencyPair->current_rate != $validated['current_rate'];
+        $marginChanged = $currentPivot && $currentPivot->pivot->margin_percent != $validated['margin_percent'];
+
+        // Si cambió la tasa o el margen, guardar en el historial
+        if ($rateChanged || $marginChanged) {
+            $notes = [];
+            if ($rateChanged) {
+                $notes[] = sprintf(
+                    'Tasa base actualizada: %s → %s',
+                    number_format((float) $currencyPair->current_rate, 4),
+                    number_format((float) $validated['current_rate'], 4)
+                );
+            }
+            if ($marginChanged) {
+                $notes[] = sprintf(
+                    'Margen actualizado: %s%% → %s%%',
+                    $currentPivot->pivot->margin_percent,
+                    $validated['margin_percent']
+                );
+            }
+
+            $currencyPair->saveRateChange(
+                exchangeHouseId: $exchangeHouse->id,
+                newRate: $validated['current_rate'],
+                marginPercent: $validated['margin_percent'],
+                userId: $user->id,
+                reason: 'manual',
+                notes: implode('. ', $notes)
+            );
+        }
+
+        // Actualizar la tasa base del par (global)
+        $currencyPair->update([
+            'current_rate' => $validated['current_rate'],
+        ]);
+
+        // Actualizar configuración específica de la casa de cambio
+        $exchangeHouse->currencyPairs()->updateExistingPivot($currencyPair->id, [
+            'margin_percent' => $validated['margin_percent'],
+            'min_amount' => $validated['min_amount'],
+            'max_amount' => $validated['max_amount'],
+        ]);
 
         return redirect()->back()->with('success', "Configuración actualizada para {$currencyPair->symbol}");
     }

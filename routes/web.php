@@ -77,12 +77,23 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::delete('/currency-pairs/{currencyPair}/detach', [App\Http\Controllers\ExchangeHouse\CurrencyPairController::class, 'detach'])->name('currency-pairs.detach');
         Route::post('/currency-pairs/{currencyPair}/toggle', [App\Http\Controllers\ExchangeHouse\CurrencyPairController::class, 'toggle'])->name('currency-pairs.toggle');
         
+        // Historial de tasas
+        Route::get('/currency-pairs/{currencyPair}/rate-history', [App\Http\Controllers\CurrencyPairRateHistoryController::class, 'index'])->name('currency-pairs.rate-history');
+        Route::get('/currency-pairs/{currencyPair}/rate-history/chart', [App\Http\Controllers\CurrencyPairRateHistoryController::class, 'chartData'])->name('currency-pairs.rate-history.chart');
+        Route::get('/currency-pairs/{currencyPair}/rate-history/comparison', [App\Http\Controllers\CurrencyPairRateHistoryController::class, 'comparison'])->name('currency-pairs.rate-history.comparison');
+        
         // Payment Methods para casas de cambio
         Route::get('/payment-methods', [App\Http\Controllers\ExchangeHouse\PaymentMethodController::class, 'index'])->name('payment-methods.index');
         Route::post('/payment-methods', [App\Http\Controllers\ExchangeHouse\PaymentMethodController::class, 'store'])->name('payment-methods.store');
         Route::put('/payment-methods/{paymentMethod}', [App\Http\Controllers\ExchangeHouse\PaymentMethodController::class, 'update'])->name('payment-methods.update');
         Route::delete('/payment-methods/{paymentMethod}', [App\Http\Controllers\ExchangeHouse\PaymentMethodController::class, 'destroy'])->name('payment-methods.destroy');
         Route::post('/payment-methods/{paymentMethod}/toggle', [App\Http\Controllers\ExchangeHouse\PaymentMethodController::class, 'toggle'])->name('payment-methods.toggle');
+        
+        // CRM Customers
+        Route::resource('customers', App\Http\Controllers\ExchangeHouse\CustomerController::class);
+        
+        // Support Tickets
+        Route::resource('tickets', App\Http\Controllers\SupportTicketController::class);
     });
 });
 

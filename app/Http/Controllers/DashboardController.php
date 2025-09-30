@@ -228,6 +228,96 @@ class DashboardController extends Controller
         // Pares de divisas disponibles
         $currencyPairs = CurrencyPair::where('is_active', true)->get();
 
+        // ===== NUEVAS MÉTRICAS PARA GRÁFICAS =====
+        
+        // Datos de volumen últimos 7 días
+        $volumeData = collect(range(6, 0))->map(function ($daysAgo) use ($exchangeHouse) {
+            $date = Carbon::now()->subDays($daysAgo);
+            $dayOrders = $exchangeHouse->orders()->whereDate('created_at', $date)->get();
+            return [
+                'date' => $date->format('D'),
+                'volume' => (float) $dayOrders->sum('base_amount'),
+                'orders' => $dayOrders->count(),
+            ];
+        });
+
+        // Distribución de uso por pares (% de operaciones)
+        $pairUsageData = $exchangeHouse->orders()
+            ->where('orders.created_at', '>=', $thisMonth)
+            ->where('orders.status', 'completed')
+            ->join('currency_pairs', 'orders.currency_pair_id', '=', 'currency_pairs.id')
+            ->selectRaw('currency_pairs.symbol as name, COUNT(*) as value')
+            ->groupBy('currency_pairs.symbol')
+            ->get()
+            ->map(function ($item, $index) {
+                $colors = ['#10b981', '#3b82f6', '#f59e0b', '#8b5cf6', '#ef4444', '#06b6d4'];
+                return [
+                    'name' => $item->name,
+                    'value' => (int) $item->value,
+                    'color' => $colors[$index % count($colors)],
+                ];
+            });
+
+        // Comisiones por par de divisas
+        $commissionsData = $exchangeHouse->orders()
+            ->where('orders.created_at', '>=', $thisMonth)
+            ->where('orders.status', 'completed')
+            ->join('currency_pairs', 'orders.currency_pair_id', '=', 'currency_pairs.id')
+            ->selectRaw('currency_pairs.symbol as pair, SUM(orders.exchange_commission) as comisiones, COUNT(*) as operaciones')
+            ->groupBy('currency_pairs.symbol')
+            ->orderByDesc('comisiones')
+            ->get();
+
+        // Distribución horaria de operaciones (últimos 30 días)
+        $hourlyData = $exchangeHouse->orders()
+            ->where('orders.created_at', '>=', Carbon::now()->subDays(30))
+            ->selectRaw('HOUR(orders.created_at) as hour, COUNT(*) as operaciones')
+            ->groupBy('hour')
+            ->orderBy('hour')
+            ->get()
+            ->map(fn($item) => [
+                'hora' => sprintf('%02d:00', $item->hour),
+                'operaciones' => (int) $item->operaciones,
+            ]);
+
+        // Comparación de tasas vs mercado (ejemplo con datos reales)
+        $rateComparisonData = CurrencyPair::where('is_active', true)
+            ->limit(5)
+            ->get()
+            ->map(fn($pair) => [
+                'pair' => $pair->symbol,
+                'current' => (float) $pair->current_rate,
+                'market' => (float) ($pair->market_rate ?? $pair->current_rate * 0.98), // Placeholder si no hay market_rate
+            ]);
+
+        // Top 5 clientes del mes
+        $topClientsData = $exchangeHouse->orders()
+            ->where('orders.created_at', '>=', $thisMonth)
+            ->where('orders.status', 'completed')
+            ->join('users', 'orders.user_id', '=', 'users.id')
+            ->selectRaw('users.name, SUM(orders.base_amount) as volumen, COUNT(*) as operaciones, SUM(orders.exchange_commission) as comision')
+            ->groupBy('users.id', 'users.name')
+            ->orderByDesc('volumen')
+            ->limit(5)
+            ->get()
+            ->map(fn($client) => [
+                'name' => $client->name,
+                'volumen' => (float) $client->volumen,
+                'operaciones' => (int) $client->operaciones,
+                'comision' => (float) $client->comision,
+            ]);
+
+        // Calcular cambios vs ayer para stats
+        $yesterday = Carbon::yesterday();
+        $ordersYesterday = $exchangeHouse->orders()->whereDate('created_at', $yesterday)->count();
+        $volumeYesterday = $exchangeHouse->orders()->whereDate('created_at', $yesterday)->sum('base_amount');
+        
+        $lastMonth = Carbon::now()->subMonth()->startOfMonth();
+        $lastMonthEnd = Carbon::now()->startOfMonth();
+        $commissionsLastMonth = $exchangeHouse->orders()
+            ->whereBetween('created_at', [$lastMonth, $lastMonthEnd])
+            ->sum('exchange_commission');
+
         return Inertia::render('Dashboard/ExchangeHouse', [
             'exchangeHouse' => $exchangeHouse,
             'stats' => [
@@ -242,11 +332,17 @@ class DashboardController extends Controller
                 'profitMonth' => number_format($profitMonth, 2),
                 'ordersMonth' => $ordersMonth->count(),
                 'platformFeeMonth' => number_format($platformFeeMonth, 2),
+                'commissionsMonth' => number_format($profitMonth, 2),
                 
                 // Hoy
                 'ordersToday' => $ordersToday,
                 'volumeToday' => number_format($volumeToday, 2),
                 'dailyLimitUsed' => number_format(($volumeToday / $exchangeHouse->daily_limit) * 100, 1),
+                
+                // Comparaciones (para % de cambio)
+                'volumeYesterday' => number_format($volumeYesterday, 2),
+                'ordersYesterday' => $ordersYesterday,
+                'commissionsLastMonth' => number_format($commissionsLastMonth, 2),
                 
                 // Promedios
                 'avgCommissionPercent' => $ordersMonth->count() > 0 ? number_format($ordersMonth->avg('house_commission_percent'), 2) : '0.00',
@@ -256,6 +352,14 @@ class DashboardController extends Controller
             'profitChart' => $profitChart,
             'recentOrders' => $recentOrders,
             'currencyPairs' => $currencyPairs,
+            
+            // ===== NUEVOS DATOS PARA GRÁFICAS =====
+            'volumeData' => $volumeData,
+            'pairUsageData' => $pairUsageData,
+            'commissionsData' => $commissionsData,
+            'hourlyData' => $hourlyData,
+            'rateComparisonData' => $rateComparisonData,
+            'topClientsData' => $topClientsData,
         ]);
     }
 

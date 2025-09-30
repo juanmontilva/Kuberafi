@@ -15,6 +15,7 @@ class Order extends Model
         'currency_pair_id',
         'payment_method_id',
         'user_id',
+        'customer_id',
         'base_amount',
         'quote_amount',
         'market_rate',
@@ -64,6 +65,11 @@ class Order extends Model
     public function paymentMethod(): BelongsTo
     {
         return $this->belongsTo(PaymentMethod::class);
+    }
+
+    public function customer(): BelongsTo
+    {
+        return $this->belongsTo(Customer::class);
     }
 
     public function commissions(): HasMany

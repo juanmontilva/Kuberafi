@@ -37,6 +37,56 @@ class CurrencyPair extends Model
             ->withTimestamps();
     }
 
+    /**
+     * Historial de tasas para este par de divisas
+     */
+    public function rateHistory(): HasMany
+    {
+        return $this->hasMany(CurrencyPairRateHistory::class);
+    }
+
+    /**
+     * Obtener historial de tasas para una casa de cambio específica
+     */
+    public function rateHistoryForExchangeHouse($exchangeHouseId)
+    {
+        return $this->rateHistory()
+            ->where('exchange_house_id', $exchangeHouseId)
+            ->orderBy('valid_from', 'desc');
+    }
+
+    /**
+     * Guardar cambio de tasa en el historial
+     */
+    public function saveRateChange($exchangeHouseId, $newRate, $marginPercent, $userId = null, $reason = 'manual', $notes = null)
+    {
+        // Marcar la tasa actual como no actual y establecer valid_until
+        CurrencyPairRateHistory::where('currency_pair_id', $this->id)
+            ->where('exchange_house_id', $exchangeHouseId)
+            ->where('is_current', true)
+            ->update([
+                'is_current' => false,
+                'valid_until' => now(),
+            ]);
+
+        // Crear nueva entrada en el historial
+        $effectiveRate = $newRate * (1 + ($marginPercent / 100));
+
+        return $this->rateHistory()->create([
+            'exchange_house_id' => $exchangeHouseId,
+            'rate' => $newRate,
+            'margin_percent' => $marginPercent,
+            'effective_rate' => $effectiveRate,
+            'min_amount' => $this->min_amount,
+            'max_amount' => $this->max_amount,
+            'changed_by' => $userId,
+            'change_reason' => $reason,
+            'notes' => $notes,
+            'valid_from' => now(),
+            'is_current' => true,
+        ]);
+    }
+
     public function calculateQuoteAmount($baseAmount, $marginPercent = 0)
     {
         $rateWithMargin = $this->current_rate * (1 + ($marginPercent / 100));
