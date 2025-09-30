@@ -60,8 +60,8 @@ class CurrencyPairController extends Controller
 
     public function destroy(CurrencyPair $currencyPair)
     {
-        // Verificar si tiene órdenes asociadas
-        if ($currencyPair->orders()->count() > 0) {
+        // Verificar si tiene órdenes asociadas - OPTIMIZADO
+        if ($currencyPair->orders()->exists()) {
             return redirect()->back()->withErrors([
                 'error' => 'No se puede eliminar este par porque tiene órdenes asociadas. Desactívalo en su lugar.'
             ]);

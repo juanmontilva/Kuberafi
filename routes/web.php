@@ -59,10 +59,11 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     // Rutas para Casas de Cambio y Super Admin
     Route::middleware(['role:super_admin,exchange_house,operator'])->group(function () {
-        Route::resource('orders', App\Http\Controllers\OrderController::class)
-            ->middleware('rate.limit.orders')->only(['store']);
-        Route::resource('orders', App\Http\Controllers\OrderController::class)
-            ->except(['store']);
+        // OPTIMIZADO: Definir store separadamente con rate limit
+        Route::post('orders', [App\Http\Controllers\OrderController::class, 'store'])
+            ->middleware('rate.limit.orders')
+            ->name('orders.store');
+        Route::resource('orders', App\Http\Controllers\OrderController::class)->except(['store']);
         Route::post('orders/{order}/complete', [App\Http\Controllers\OrderController::class, 'complete'])->name('orders.complete');
     });
 

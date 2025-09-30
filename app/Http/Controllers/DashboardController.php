@@ -73,31 +73,63 @@ class DashboardController extends Controller
             ->whereBetween('created_at', [$lastMonth, $thisMonth])
             ->sum('amount');
 
-        // Datos para gráficos - últimos 7 días
-        $last7Days = collect(range(6, 0))->map(function ($daysAgo) {
+        // Datos para gráficos - últimos 7 días (OPTIMIZADO)
+        // Obtener datos de órdenes agrupados
+        $ordersStats = Order::where('created_at', '>=', Carbon::now()->subDays(6)->startOfDay())
+            ->selectRaw('DATE(created_at) as date, COUNT(*) as orders, SUM(base_amount) as volume')
+            ->groupBy('date')
+            ->get()
+            ->keyBy('date');
+
+        // Obtener comisiones agrupadas
+        $commissionsStats = Commission::where('type', 'platform')
+            ->where('created_at', '>=', Carbon::now()->subDays(6)->startOfDay())
+            ->selectRaw('DATE(created_at) as date, SUM(amount) as commissions')
+            ->groupBy('date')
+            ->get()
+            ->keyBy('date');
+
+        // Mapear todos los días
+        $last7Days = collect(range(6, 0))->map(function ($daysAgo) use ($ordersStats, $commissionsStats) {
             $date = Carbon::now()->subDays($daysAgo);
+            $dateKey = $date->format('Y-m-d');
+            
+            $orderData = $ordersStats->get($dateKey);
+            $commissionData = $commissionsStats->get($dateKey);
+            
             return [
-                'date' => $date->format('Y-m-d'),
+                'date' => $dateKey,
                 'day' => $date->format('D'),
-                'orders' => Order::whereDate('created_at', $date)->count(),
-                'volume' => Order::whereDate('created_at', $date)->sum('base_amount'),
-                'commissions' => Commission::where('type', 'platform')->whereDate('created_at', $date)->sum('amount'),
+                'orders' => $orderData ? (int) $orderData->orders : 0,
+                'volume' => $orderData ? (float) $orderData->volume : 0,
+                'commissions' => $commissionData ? (float) $commissionData->commissions : 0,
             ];
         });
 
-        // Datos mensuales del año actual
-        $monthlyData = collect(range(1, 12))->map(function ($month) use ($thisYear) {
-            $startOfMonth = Carbon::create($thisYear->year, $month, 1)->startOfMonth();
-            $endOfMonth = Carbon::create($thisYear->year, $month, 1)->endOfMonth();
+        // Datos mensuales del año actual - OPTIMIZADO (2 queries en lugar de 36)
+        $monthlyStats = Order::selectRaw('MONTH(created_at) as month, COUNT(*) as orders, SUM(base_amount) as volume')
+            ->whereYear('created_at', $thisYear->year)
+            ->groupBy('month')
+            ->get()
+            ->keyBy('month');
+
+        $monthlyCommissions = Commission::where('type', 'platform')
+            ->selectRaw('MONTH(created_at) as month, SUM(amount) as commissions')
+            ->whereYear('created_at', $thisYear->year)
+            ->groupBy('month')
+            ->get()
+            ->keyBy('month');
+
+        $monthlyData = collect(range(1, 12))->map(function ($month) use ($monthlyStats, $monthlyCommissions) {
+            $stats = $monthlyStats->get($month);
+            $commission = $monthlyCommissions->get($month);
             
             return [
                 'month' => $month,
-                'name' => $startOfMonth->format('M'),
-                'orders' => Order::whereBetween('created_at', [$startOfMonth, $endOfMonth])->count(),
-                'volume' => Order::whereBetween('created_at', [$startOfMonth, $endOfMonth])->sum('base_amount'),
-                'commissions' => Commission::where('type', 'platform')
-                    ->whereBetween('created_at', [$startOfMonth, $endOfMonth])
-                    ->sum('amount'),
+                'name' => Carbon::create(null, $month, 1)->format('M'),
+                'orders' => $stats ? (int) $stats->orders : 0,
+                'volume' => $stats ? (float) $stats->volume : 0,
+                'commissions' => $commission ? (float) $commission->commissions : 0,
             ];
         });
 
@@ -183,30 +215,51 @@ class DashboardController extends Controller
         $thisMonth = Carbon::now()->startOfMonth();
         $last24h = Carbon::now()->subHours(24);
         
-        // Métricas estilo Binance - Últimas 24h
-        $orders24h = $exchangeHouse->orders()->where('created_at', '>=', $last24h)->get();
-        $volume24h = $orders24h->sum('base_amount');
-        $profit24h = $orders24h->sum('exchange_commission');
-        $platformFee24h = $orders24h->sum('platform_commission');
+        // Métricas estilo Binance - Últimas 24h (OPTIMIZADO)
+        $stats24h = $exchangeHouse->orders()
+            ->where('created_at', '>=', $last24h)
+            ->selectRaw('
+                COUNT(*) as orders_count,
+                COALESCE(SUM(base_amount), 0) as volume,
+                COALESCE(SUM(exchange_commission), 0) as profit,
+                COALESCE(SUM(platform_commission), 0) as platform_fee
+            ')
+            ->first();
+
+        $orders24h = $stats24h->orders_count;
+        $volume24h = $stats24h->volume;
+        $profit24h = $stats24h->profit;
+        $platformFee24h = $stats24h->platform_fee;
         
-        // Métricas del mes
-        $ordersMonth = $exchangeHouse->orders()->where('created_at', '>=', $thisMonth)->get();
-        $volumeMonth = $ordersMonth->sum('base_amount');
-        $profitMonth = $ordersMonth->sum('exchange_commission');
-        $platformFeeMonth = $ordersMonth->sum('platform_commission');
+        // Métricas del mes (OPTIMIZADO)
+        $statsMonth = $exchangeHouse->orders()
+            ->where('created_at', '>=', $thisMonth)
+            ->selectRaw('
+                COUNT(*) as orders_count,
+                COALESCE(SUM(base_amount), 0) as volume,
+                COALESCE(SUM(exchange_commission), 0) as profit,
+                COALESCE(SUM(platform_commission), 0) as platform_fee
+            ')
+            ->first();
+
+        $ordersMonth = $statsMonth->orders_count;
+        $volumeMonth = $statsMonth->volume;
+        $profitMonth = $statsMonth->profit;
+        $platformFeeMonth = $statsMonth->platform_fee;
         
         // Métricas de hoy
         $ordersToday = $exchangeHouse->orders()->whereDate('created_at', $today)->count();
         $volumeToday = $exchangeHouse->orders()->whereDate('created_at', $today)->sum('base_amount');
         
-        // Top pares de divisas (mejor rendimiento)
+        // Top pares de divisas (OPTIMIZADO - JOIN en lugar de eager loading con groupBy)
         $topPairs = $exchangeHouse->orders()
-            ->where('status', 'completed')
-            ->selectRaw('currency_pair_id, COUNT(*) as total_orders, SUM(base_amount) as total_volume, SUM(exchange_commission) as total_profit')
-            ->groupBy('currency_pair_id')
+            ->join('currency_pairs', 'orders.currency_pair_id', '=', 'currency_pairs.id')
+            ->where('orders.status', 'completed')
+            ->selectRaw('currency_pairs.id, currency_pairs.symbol, currency_pairs.base_currency, currency_pairs.quote_currency, 
+                         COUNT(*) as total_orders, SUM(orders.base_amount) as total_volume, SUM(orders.exchange_commission) as total_profit')
+            ->groupBy('currency_pairs.id', 'currency_pairs.symbol', 'currency_pairs.base_currency', 'currency_pairs.quote_currency')
             ->orderByDesc('total_profit')
             ->limit(5)
-            ->with('currencyPair')
             ->get();
         
         // Gráfica de ganancias (últimos 7 días)
@@ -230,14 +283,26 @@ class DashboardController extends Controller
 
         // ===== NUEVAS MÉTRICAS PARA GRÁFICAS =====
         
-        // Datos de volumen últimos 7 días
-        $volumeData = collect(range(6, 0))->map(function ($daysAgo) use ($exchangeHouse) {
+        // Datos de volumen últimos 7 días (OPTIMIZADO)
+        // Una sola query agrupada por fecha
+        $volumeStats = $exchangeHouse->orders()
+            ->where('created_at', '>=', Carbon::now()->subDays(6)->startOfDay())
+            ->selectRaw('DATE(created_at) as date, SUM(base_amount) as volume, COUNT(*) as orders')
+            ->groupBy('date')
+            ->orderBy('date')
+            ->get()
+            ->keyBy('date');
+
+        // Mapear todos los días (incluyendo días sin datos)
+        $volumeData = collect(range(6, 0))->map(function ($daysAgo) use ($volumeStats) {
             $date = Carbon::now()->subDays($daysAgo);
-            $dayOrders = $exchangeHouse->orders()->whereDate('created_at', $date)->get();
+            $dateKey = $date->format('Y-m-d');
+            $stats = $volumeStats->get($dateKey);
+            
             return [
                 'date' => $date->format('D'),
-                'volume' => (float) $dayOrders->sum('base_amount'),
-                'orders' => $dayOrders->count(),
+                'volume' => $stats ? (float) $stats->volume : 0,
+                'orders' => $stats ? (int) $stats->orders : 0,
             ];
         });
 
@@ -307,16 +372,22 @@ class DashboardController extends Controller
                 'comision' => (float) $client->comision,
             ]);
 
-        // Calcular cambios vs ayer para stats
+        // Calcular cambios vs ayer para stats - OPTIMIZADO (1 query en lugar de 3)
         $yesterday = Carbon::yesterday();
-        $ordersYesterday = $exchangeHouse->orders()->whereDate('created_at', $yesterday)->count();
-        $volumeYesterday = $exchangeHouse->orders()->whereDate('created_at', $yesterday)->sum('base_amount');
-        
         $lastMonth = Carbon::now()->subMonth()->startOfMonth();
         $lastMonthEnd = Carbon::now()->startOfMonth();
-        $commissionsLastMonth = $exchangeHouse->orders()
-            ->whereBetween('created_at', [$lastMonth, $lastMonthEnd])
-            ->sum('exchange_commission');
+        
+        $comparisons = $exchangeHouse->orders()
+            ->selectRaw('
+                COUNT(CASE WHEN DATE(created_at) = ? THEN 1 END) as orders_yesterday,
+                COALESCE(SUM(CASE WHEN DATE(created_at) = ? THEN base_amount END), 0) as volume_yesterday,
+                COALESCE(SUM(CASE WHEN created_at >= ? AND created_at < ? THEN exchange_commission END), 0) as commissions_last_month
+            ', [$yesterday->format('Y-m-d'), $yesterday->format('Y-m-d'), $lastMonth, $lastMonthEnd])
+            ->first();
+        
+        $ordersYesterday = $comparisons->orders_yesterday;
+        $volumeYesterday = $comparisons->volume_yesterday;
+        $commissionsLastMonth = $comparisons->commissions_last_month;
 
         return Inertia::render('Dashboard/ExchangeHouse', [
             'exchangeHouse' => $exchangeHouse,
@@ -324,13 +395,13 @@ class DashboardController extends Controller
                 // 24 horas
                 'volume24h' => number_format($volume24h, 2),
                 'profit24h' => number_format($profit24h, 2),
-                'orders24h' => $orders24h->count(),
+                'orders24h' => $orders24h,
                 'platformFee24h' => number_format($platformFee24h, 2),
                 
                 // Mes actual
                 'volumeMonth' => number_format($volumeMonth, 2),
                 'profitMonth' => number_format($profitMonth, 2),
-                'ordersMonth' => $ordersMonth->count(),
+                'ordersMonth' => $ordersMonth,
                 'platformFeeMonth' => number_format($platformFeeMonth, 2),
                 'commissionsMonth' => number_format($profitMonth, 2),
                 
@@ -345,8 +416,8 @@ class DashboardController extends Controller
                 'commissionsLastMonth' => number_format($commissionsLastMonth, 2),
                 
                 // Promedios
-                'avgCommissionPercent' => $ordersMonth->count() > 0 ? number_format($ordersMonth->avg('house_commission_percent'), 2) : '0.00',
-                'avgProfitPerOrder' => $ordersMonth->count() > 0 ? number_format($profitMonth / $ordersMonth->count(), 2) : '0.00',
+                'avgCommissionPercent' => $ordersMonth > 0 ? number_format($profitMonth / $ordersMonth, 2) : '0.00',
+                'avgProfitPerOrder' => $ordersMonth > 0 ? number_format($profitMonth / $ordersMonth, 2) : '0.00',
             ],
             'topPairs' => $topPairs,
             'profitChart' => $profitChart,

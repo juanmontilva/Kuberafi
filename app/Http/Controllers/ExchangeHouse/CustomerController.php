@@ -21,13 +21,25 @@ class CustomerController extends Controller
             ->orderBy('total_volume', 'desc')
             ->paginate(20);
         
+        // OPTIMIZADO: Una sola query para contar por tier
+        $tierStats = Customer::where('exchange_house_id', $exchangeHouseId)
+            ->selectRaw('
+                COUNT(*) as total,
+                COUNT(CASE WHEN tier = \'vip\' THEN 1 END) as vip,
+                COUNT(CASE WHEN tier = \'regular\' THEN 1 END) as regular,
+                COUNT(CASE WHEN tier = \'new\' THEN 1 END) as new,
+                COUNT(CASE WHEN tier = \'inactive\' THEN 1 END) as inactive,
+                COALESCE(SUM(total_volume), 0) as total_volume
+            ')
+            ->first();
+        
         $stats = [
-            'total' => Customer::where('exchange_house_id', $exchangeHouseId)->count(),
-            'vip' => Customer::where('exchange_house_id', $exchangeHouseId)->where('tier', 'vip')->count(),
-            'regular' => Customer::where('exchange_house_id', $exchangeHouseId)->where('tier', 'regular')->count(),
-            'new' => Customer::where('exchange_house_id', $exchangeHouseId)->where('tier', 'new')->count(),
-            'inactive' => Customer::where('exchange_house_id', $exchangeHouseId)->where('tier', 'inactive')->count(),
-            'total_volume' => Customer::where('exchange_house_id', $exchangeHouseId)->sum('total_volume'),
+            'total' => $tierStats->total,
+            'vip' => $tierStats->vip,
+            'regular' => $tierStats->regular,
+            'new' => $tierStats->new,
+            'inactive' => $tierStats->inactive,
+            'total_volume' => $tierStats->total_volume,
         ];
         
         return Inertia::render('ExchangeHouse/Customers', [

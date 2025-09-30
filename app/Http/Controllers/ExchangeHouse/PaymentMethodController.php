@@ -107,8 +107,8 @@ class PaymentMethodController extends Controller
             abort(403);
         }
 
-        // Verificar que no tenga órdenes asociadas
-        if ($paymentMethod->orders()->count() > 0) {
+        // Verificar que no tenga órdenes asociadas - OPTIMIZADO
+        if ($paymentMethod->orders()->exists()) {
             return redirect()->back()->with('error', 'No se puede eliminar un método de pago con órdenes asociadas');
         }
 

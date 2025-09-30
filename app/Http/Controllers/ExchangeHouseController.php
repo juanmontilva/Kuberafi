@@ -72,7 +72,15 @@ class ExchangeHouseController extends Controller
             abort(403);
         }
 
-        $exchangeHouse->load(['users', 'orders.currencyPair']);
+        // OPTIMIZADO: Eager load con limit para evitar cargar todas las órdenes
+        $exchangeHouse->load([
+            'users',
+            'orders' => function($query) {
+                $query->with('currencyPair')
+                    ->orderBy('created_at', 'desc')
+                    ->limit(20); // Solo las 20 más recientes
+            }
+        ]);
         
         return Inertia::render('Admin/ShowExchangeHouse', [
             'exchangeHouse' => $exchangeHouse,

@@ -30,7 +30,7 @@ class CurrencyPairController extends Controller
         return Inertia::render('ExchangeHouse/CurrencyPairs', [
             'activePairs' => $activePairs,
             'availablePairs' => $availablePairs,
-            'exchangeHouse' => $exchangeHouse->load('commissions'),
+            'exchangeHouse' => $exchangeHouse, // Remover load innecesario si no se usa en frontend
             'platformCommissionRate' => $platformCommissionRate,
         ]);
     }
@@ -158,12 +158,8 @@ class CurrencyPairController extends Controller
     {
         $exchangeHouse = request()->user()->exchangeHouse;
 
-        // Verificar si hay órdenes con este par
-        $ordersCount = $exchangeHouse->orders()
-            ->where('currency_pair_id', $currencyPair->id)
-            ->count();
-
-        if ($ordersCount > 0) {
+        // Verificar si hay órdenes con este par - OPTIMIZADO
+        if ($exchangeHouse->orders()->where('currency_pair_id', $currencyPair->id)->exists()) {
             return redirect()->back()->withErrors([
                 'error' => 'No puedes eliminar este par porque tienes órdenes asociadas. Desactívalo en su lugar.'
             ]);
