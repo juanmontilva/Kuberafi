@@ -1,8 +1,34 @@
-import { Head } from '@inertiajs/react';
+import { Head, router, useForm } from '@inertiajs/react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import KuberafiLayout from '@/layouts/kuberafi-layout';
-import { Users, TrendingUp, Star, UserX } from 'lucide-react';
+import { Users, TrendingUp, Star, UserX, Plus, Search, Filter, Eye, Trash2, MoreVertical } from 'lucide-react';
+import { useState } from 'react';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 
 interface Customer {
   id: number;
@@ -28,8 +54,16 @@ interface Stats {
 interface Props {
   customers: {
     data: Customer[];
+    links: any[];
+    current_page: number;
+    last_page: number;
   };
   stats: Stats;
+  filters?: {
+    search?: string;
+    tier?: string;
+    status?: string;
+  };
 }
 
 const tierColors = {
@@ -46,17 +80,174 @@ const tierLabels = {
   inactive: '⚫ Inactivo',
 };
 
-function Customers({ customers, stats }: Props) {
+function Customers({ customers, stats, filters }: Props) {
+  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+  const [searchTerm, setSearchTerm] = useState(filters?.search || '');
+  const [tierFilter, setTierFilter] = useState(filters?.tier || 'all');
+  
+  const { data, setData, post, processing, errors, reset } = useForm({
+    name: '',
+    email: '',
+    phone: '',
+    identification: '',
+    address: '',
+    internal_notes: '',
+  });
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    post('/customers', {
+      preserveScroll: true,
+      onSuccess: () => {
+        reset();
+        setIsCreateDialogOpen(false);
+      },
+    });
+  };
+
+  const handleSearch = () => {
+    router.get('/customers', {
+      search: searchTerm,
+      tier: tierFilter,
+    }, {
+      preserveState: true,
+      preserveScroll: true,
+    });
+  };
+
+  const handleViewCustomer = (customerId: number) => {
+    router.visit(`/customers/${customerId}`);
+  };
+
+  const handleDeleteCustomer = (customerId: number, customerName: string) => {
+    if (confirm(`¿Estás seguro de eliminar a ${customerName}? Esta acción no se puede deshacer.`)) {
+      router.delete(`/customers/${customerId}`, {
+        preserveScroll: true,
+      });
+    }
+  };
+
   return (
     <>
       <Head title="Mis Clientes - CRM" />
       
       <div className="space-y-6">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">CRM - Mis Clientes</h1>
-          <p className="text-muted-foreground">
-            Gestiona tu base de clientes y sus métricas
-          </p>
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight">CRM - Mis Clientes</h1>
+            <p className="text-muted-foreground">
+              Gestiona tu base de clientes y sus métricas
+            </p>
+          </div>
+          
+          <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
+            <DialogTrigger asChild>
+              <Button className="gap-2">
+                <Plus className="h-4 w-4" />
+                Agregar Cliente
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle>Nuevo Cliente</DialogTitle>
+                <DialogDescription>
+                  Registra un nuevo cliente en tu base de datos
+                </DialogDescription>
+              </DialogHeader>
+              
+              <form onSubmit={handleSubmit} className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="col-span-2">
+                    <Label htmlFor="name">Nombre completo *</Label>
+                    <Input
+                      id="name"
+                      value={data.name}
+                      onChange={e => setData('name', e.target.value)}
+                      placeholder="Juan Pérez"
+                      className="mt-1"
+                      required
+                    />
+                    {errors.name && <p className="text-sm text-red-500 mt-1">{errors.name}</p>}
+                  </div>
+
+                  <div>
+                    <Label htmlFor="email">Email</Label>
+                    <Input
+                      id="email"
+                      type="email"
+                      value={data.email}
+                      onChange={e => setData('email', e.target.value)}
+                      placeholder="juan@example.com"
+                      className="mt-1"
+                    />
+                    {errors.email && <p className="text-sm text-red-500 mt-1">{errors.email}</p>}
+                  </div>
+
+                  <div>
+                    <Label htmlFor="phone">Teléfono</Label>
+                    <Input
+                      id="phone"
+                      value={data.phone}
+                      onChange={e => setData('phone', e.target.value)}
+                      placeholder="+58 424-1234567"
+                      className="mt-1"
+                    />
+                    {errors.phone && <p className="text-sm text-red-500 mt-1">{errors.phone}</p>}
+                  </div>
+
+                  <div className="col-span-2">
+                    <Label htmlFor="identification">Identificación (CI/RIF/Pasaporte)</Label>
+                    <Input
+                      id="identification"
+                      value={data.identification}
+                      onChange={e => setData('identification', e.target.value)}
+                      placeholder="V-12345678"
+                      className="mt-1"
+                    />
+                    {errors.identification && <p className="text-sm text-red-500 mt-1">{errors.identification}</p>}
+                  </div>
+
+                  <div className="col-span-2">
+                    <Label htmlFor="address">Dirección</Label>
+                    <Textarea
+                      id="address"
+                      value={data.address}
+                      onChange={e => setData('address', e.target.value)}
+                      placeholder="Dirección completa"
+                      className="mt-1"
+                    />
+                    {errors.address && <p className="text-sm text-red-500 mt-1">{errors.address}</p>}
+                  </div>
+
+                  <div className="col-span-2">
+                    <Label htmlFor="internal_notes">Notas internas</Label>
+                    <Textarea
+                      id="internal_notes"
+                      value={data.internal_notes}
+                      onChange={e => setData('internal_notes', e.target.value)}
+                      placeholder="Notas privadas sobre el cliente..."
+                      className="mt-1"
+                      rows={3}
+                    />
+                    {errors.internal_notes && <p className="text-sm text-red-500 mt-1">{errors.internal_notes}</p>}
+                  </div>
+                </div>
+
+                <div className="flex justify-end gap-2 pt-4">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setIsCreateDialogOpen(false)}
+                  >
+                    Cancelar
+                  </Button>
+                  <Button type="submit" disabled={processing}>
+                    {processing ? 'Guardando...' : 'Crear Cliente'}
+                  </Button>
+                </div>
+              </form>
+            </DialogContent>
+          </Dialog>
         </div>
 
         {/* Stats Cards */}
@@ -127,6 +318,44 @@ function Customers({ customers, stats }: Props) {
           </CardContent>
         </Card>
 
+        {/* Filtros y Búsqueda */}
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex gap-4">
+              <div className="flex-1">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    placeholder="Buscar por nombre, email, teléfono o identificación..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
+                    className="pl-10"
+                  />
+                </div>
+              </div>
+              
+              <Select value={tierFilter} onValueChange={setTierFilter}>
+                <SelectTrigger className="w-[180px]">
+                  <Filter className="h-4 w-4 mr-2" />
+                  <SelectValue placeholder="Filtrar por tier" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos los tiers</SelectItem>
+                  <SelectItem value="vip">⭐ VIP</SelectItem>
+                  <SelectItem value="regular">🟢 Regular</SelectItem>
+                  <SelectItem value="new">🆕 Nuevos</SelectItem>
+                  <SelectItem value="inactive">⚫ Inactivos</SelectItem>
+                </SelectContent>
+              </Select>
+              
+              <Button onClick={handleSearch}>
+                Buscar
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+
         {/* Lista de Clientes */}
         <Card>
           <CardHeader>
@@ -139,15 +368,21 @@ function Customers({ customers, stats }: Props) {
             {customers.data.length === 0 ? (
               <div className="text-center py-12">
                 <Users className="mx-auto h-12 w-12 text-muted-foreground" />
-                <h3 className="mt-4 text-lg font-semibold">No tienes clientes aún</h3>
+                <h3 className="mt-4 text-lg font-semibold">No se encontraron clientes</h3>
                 <p className="text-muted-foreground mt-2">
-                  Los clientes se crearán automáticamente cuando hagas órdenes
+                  {filters?.search 
+                    ? 'Intenta con otros términos de búsqueda'
+                    : 'Agrega tu primer cliente usando el botón "Agregar Cliente"'
+                  }
                 </p>
               </div>
             ) : (
-              <div className="space-y-4">
+              <div className="space-y-3">
                 {customers.data.map((customer) => (
-                  <div key={customer.id} className="flex items-center justify-between p-4 border rounded-lg hover:bg-muted/50">
+                  <div 
+                    key={customer.id} 
+                    className="flex items-center justify-between p-4 border rounded-lg hover:bg-muted/50 transition-colors"
+                  >
                     <div className="space-y-1 flex-1">
                       <div className="flex items-center gap-2">
                         <span className="text-2xl">👤</span>
@@ -176,6 +411,35 @@ function Customers({ customers, stats }: Props) {
                           </p>
                         )}
                       </div>
+                    </div>
+                    
+                    <div className="flex gap-2">
+                      <Button 
+                        variant="outline" 
+                        size="sm"
+                        onClick={() => handleViewCustomer(customer.id)}
+                        className="gap-2"
+                      >
+                        <Eye className="h-4 w-4" />
+                        Ver detalles
+                      </Button>
+
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="sm">
+                            <MoreVertical className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem
+                            onClick={() => handleDeleteCustomer(customer.id, customer.name)}
+                            className="text-red-600 focus:text-red-600"
+                          >
+                            <Trash2 className="h-4 w-4 mr-2" />
+                            Eliminar
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </div>
                   </div>
                 ))}

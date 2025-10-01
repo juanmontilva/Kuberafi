@@ -55,6 +55,11 @@ class Customer extends Model
         return $this->hasMany(Order::class);
     }
 
+    public function activities(): HasMany
+    {
+        return $this->hasMany(CustomerActivity::class);
+    }
+
     /**
      * Actualizar métricas del cliente
      */

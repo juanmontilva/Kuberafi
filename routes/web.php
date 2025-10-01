@@ -92,6 +92,19 @@ Route::middleware(['auth', 'verified'])->group(function () {
         
         // CRM Customers
         Route::resource('customers', App\Http\Controllers\ExchangeHouse\CustomerController::class);
+        Route::post('/customers/{customer}/activities', [App\Http\Controllers\ExchangeHouse\CustomerController::class, 'addActivity'])->name('customers.activities.store');
+        
+        // Analytics Endpoints
+        Route::prefix('analytics')->name('analytics.')->group(function () {
+            Route::get('/currency-pair-trends', [App\Http\Controllers\ExchangeHouse\AnalyticsController::class, 'currencyPairTrends'])->name('currency-pair-trends');
+            Route::get('/activity-heatmap', [App\Http\Controllers\ExchangeHouse\AnalyticsController::class, 'activityHeatmap'])->name('activity-heatmap');
+            Route::get('/margin-analysis', [App\Http\Controllers\ExchangeHouse\AnalyticsController::class, 'marginAnalysis'])->name('margin-analysis');
+            Route::get('/liquidity-forecast', [App\Http\Controllers\ExchangeHouse\AnalyticsController::class, 'liquidityForecast'])->name('liquidity-forecast');
+            Route::get('/period-comparison', [App\Http\Controllers\ExchangeHouse\AnalyticsController::class, 'periodComparison'])->name('period-comparison');
+            Route::get('/payment-method-analysis', [App\Http\Controllers\ExchangeHouse\AnalyticsController::class, 'paymentMethodAnalysis'])->name('payment-method-analysis');
+            Route::get('/processing-speed', [App\Http\Controllers\ExchangeHouse\AnalyticsController::class, 'processingSpeed'])->name('processing-speed');
+            Route::get('/top-customers', [App\Http\Controllers\ExchangeHouse\AnalyticsController::class, 'topCustomersAnalysis'])->name('top-customers');
+        });
         
         // Support Tickets
         Route::resource('tickets', App\Http\Controllers\SupportTicketController::class);

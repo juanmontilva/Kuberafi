@@ -10,6 +10,7 @@ use App\Models\User;
 use App\Models\SystemSetting;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 use Carbon\Carbon;
 
@@ -355,18 +356,24 @@ class DashboardController extends Controller
                 'market' => (float) ($pair->market_rate ?? $pair->current_rate * 0.98), // Placeholder si no hay market_rate
             ]);
 
-        // Top 5 clientes del mes
+        // Top 5 clientes del mes (usar customer_id si existe, sino user_id)
         $topClientsData = $exchangeHouse->orders()
             ->where('orders.created_at', '>=', $thisMonth)
             ->where('orders.status', 'completed')
-            ->join('users', 'orders.user_id', '=', 'users.id')
-            ->selectRaw('users.name, SUM(orders.base_amount) as volumen, COUNT(*) as operaciones, SUM(orders.exchange_commission) as comision')
-            ->groupBy('users.id', 'users.name')
+            ->leftJoin('customers', 'orders.customer_id', '=', 'customers.id')
+            ->leftJoin('users', 'orders.user_id', '=', 'users.id')
+            ->selectRaw('
+                COALESCE(customers.name, users.name) as name, 
+                SUM(orders.base_amount) as volumen, 
+                COUNT(*) as operaciones, 
+                SUM(orders.exchange_commission) as comision
+            ')
+            ->groupBy(DB::raw('COALESCE(customers.id, users.id)'), DB::raw('COALESCE(customers.name, users.name)'))
             ->orderByDesc('volumen')
             ->limit(5)
             ->get()
             ->map(fn($client) => [
-                'name' => $client->name,
+                'name' => $client->name ?? 'Usuario',
                 'volumen' => (float) $client->volumen,
                 'operaciones' => (int) $client->operaciones,
                 'comision' => (float) $client->comision,
@@ -389,7 +396,7 @@ class DashboardController extends Controller
         $volumeYesterday = $comparisons->volume_yesterday;
         $commissionsLastMonth = $comparisons->commissions_last_month;
 
-        return Inertia::render('Dashboard/ExchangeHouse', [
+        return Inertia::render('Dashboard/ExchangeHouseAdvanced', [
             'exchangeHouse' => $exchangeHouse,
             'stats' => [
                 // 24 horas

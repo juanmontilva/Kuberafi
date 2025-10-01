@@ -138,7 +138,7 @@ public function dashboard()
 {
     $exchangeHouse = auth()->user()->exchangeHouse;
     
-    return Inertia::render('Dashboard/ExchangeHouse', [
+    return Inertia::render('Dashboard/ExchangeHouseAdvanced', [
         'exchangeHouse' => $exchangeHouse,
         'stats' => $this->getStats(),
         'recentOrders' => $this->getRecentOrders(),

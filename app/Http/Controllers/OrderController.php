@@ -117,6 +117,8 @@ class OrderController extends Controller
                 'quote_amount' => $quoteAmount,
                 'market_rate' => $currencyPair->current_rate,
                 'applied_rate' => $currencyPair->current_rate,
+                'expected_margin_percent' => $houseCommissionPercent,
+                'actual_margin_percent' => $houseCommissionPercent,
                 'house_commission_percent' => $houseCommissionPercent,
                 'house_commission_amount' => $houseCommissionAmount,
                 'platform_commission' => $platformCommission,
@@ -142,9 +144,9 @@ class OrderController extends Controller
         if ($user->isSuperAdmin() || 
             ($user->exchange_house_id === $order->exchange_house_id)) {
             
-            $order->load(['exchangeHouse', 'currencyPair', 'user', 'commissions']);
+            $order->load(['exchangeHouse', 'currencyPair', 'user', 'customer']);
             
-            return Inertia::render('Orders/Show', [
+            return Inertia::render('Orders/ShowImproved', [
                 'order' => $order,
             ]);
         }
@@ -187,23 +189,48 @@ class OrderController extends Controller
         
         $validated = $request->validate([
             'actual_rate' => 'required|numeric|min:0',
+            'actual_quote_amount' => 'required|numeric|min:0',
             'actual_margin_percent' => 'required|numeric',
             'notes' => 'nullable|string|max:1000',
         ]);
         
         DB::transaction(function () use ($order, $validated) {
+            // Calcular la ganancia real basada en el monto entregado
+            $expectedQuoteAmount = $order->quote_amount;
+            $actualQuoteAmount = $validated['actual_quote_amount'];
+            $differenceInQuote = $expectedQuoteAmount - $actualQuoteAmount;
+            
+            // Convertir diferencia en moneda quote a moneda base usando la tasa aplicada
+            $appliedRate = $validated['actual_rate'];
+            $differenceInBase = $differenceInQuote / $appliedRate;
+            
+            // Ganancia adicional + ganancia esperada (ambas en moneda base)
+            $expectedCommission = $order->house_commission_amount;
+            $realHouseCommission = $expectedCommission + $differenceInBase;
+            
+            // Calcular comisión de plataforma
+            // Si la casa ganó $50, la plataforma cobra 0.15% sobre el monto base (no sobre la comisión)
+            $platformRate = \App\Models\SystemSetting::getPlatformCommissionRate();
+            $realPlatformCommission = ($order->base_amount * $platformRate) / 100;
+            
+            // Ganancia neta real = Comisión bruta - Fee plataforma
+            $realExchangeCommission = $realHouseCommission - $realPlatformCommission;
+            
             // Actualizar orden con datos reales
             $order->update([
+                'quote_amount' => $actualQuoteAmount, // Monto real entregado
                 'actual_margin_percent' => $validated['actual_margin_percent'],
+                'house_commission_amount' => $realHouseCommission,
+                'platform_commission' => $realPlatformCommission,
+                'exchange_commission' => $realExchangeCommission,
                 'status' => 'completed',
                 'completed_at' => now(),
                 'notes' => $validated['notes'] ?? $order->notes,
             ]);
             
-            // Calcular comisiones finales si no se hicieron antes
-            if (!$order->commissions()->exists()) {
-                Commission::createFromOrder($order);
-            }
+            // Las comisiones ya están calculadas y guardadas en la orden
+            // No necesitamos crear registros separados en la tabla commissions
+            // ya que toda la información está en el modelo Order
         });
         
         return redirect()->back()
