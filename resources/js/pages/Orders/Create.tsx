@@ -214,14 +214,14 @@ function CreateOrder({ currencyPairs, platformCommissionRate }: Props) {
                     </div>
                     
                     {/* Desglose de Comisión */}
-                    <div className="bg-red-50 border border-red-200 rounded p-2 space-y-1">
-                      <div className="flex justify-between text-red-600 font-medium">
+                    <div className="bg-green-50 border border-green-200 rounded p-2 space-y-1">
+                      <div className="flex justify-between text-green-600 font-medium">
                         <span>Comisión Total ({data.house_commission_percent}%):</span>
-                        <span>-${(parseFloat(data.base_amount) * parseFloat(data.house_commission_percent) / 100).toFixed(2)}</span>
+                        <span>+${(parseFloat(data.base_amount) * parseFloat(data.house_commission_percent) / 100).toFixed(2)}</span>
                       </div>
                       <div className="flex justify-between text-xs text-red-700 pl-4">
                         <span>↳ KuberaFi ({platformCommissionRate}%):</span>
-                        <span>${(parseFloat(data.base_amount) * platformCommissionRate / 100).toFixed(2)}</span>
+                        <span>-${(parseFloat(data.base_amount) * platformCommissionRate / 100).toFixed(2)}</span>
                       </div>
                       <div className="flex justify-between text-xs text-green-700 pl-4">
                         <span>↳ Tu ganancia neta:</span>
