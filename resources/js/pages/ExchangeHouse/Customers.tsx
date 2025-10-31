@@ -21,7 +21,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import KuberafiLayout from '@/layouts/kuberafi-layout';
-import { Users, TrendingUp, Star, UserX, Plus, Search, Filter, Eye, Trash2, MoreVertical } from 'lucide-react';
+import { Users, TrendingUp, Star, UserX, Plus, Search, Filter, Eye, Trash2, MoreVertical, AlertTriangle } from 'lucide-react';
 import { useState } from 'react';
 import {
   DropdownMenu,
@@ -40,6 +40,8 @@ interface Customer {
   total_orders: number;
   loyalty_points: number;
   last_order_date: string | null;
+  pending_orders_count?: number;
+  pending_orders_amount?: string;
 }
 
 interface Stats {
@@ -49,6 +51,8 @@ interface Stats {
   new: number;
   inactive: number;
   total_volume: number;
+  customers_with_pending: number;
+  total_pending_amount: number;
 }
 
 interface Props {
@@ -250,6 +254,33 @@ function Customers({ customers, stats, filters }: Props) {
           </Dialog>
         </div>
 
+        {/* Alerta de Deudas Pendientes */}
+        {stats.customers_with_pending > 0 && (
+          <Card className="border-yellow-500 bg-yellow-900/10">
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 rounded-full bg-yellow-500/20">
+                    <AlertTriangle className="h-6 w-6 text-yellow-500" />
+                  </div>
+                  <div>
+                    <CardTitle className="text-yellow-500">⚠ Clientes con Deudas Pendientes</CardTitle>
+                    <CardDescription>
+                      {stats.customers_with_pending} cliente(s) tienen operaciones sin completar
+                    </CardDescription>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <p className="text-3xl font-bold text-yellow-500">
+                    ${parseFloat(stats.total_pending_amount.toString()).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                  </p>
+                  <p className="text-xs text-muted-foreground">Total pendiente</p>
+                </div>
+              </div>
+            </CardHeader>
+          </Card>
+        )}
+
         {/* Stats Cards */}
         <div className="grid gap-4 md:grid-cols-5">
           <Card>
@@ -336,12 +367,13 @@ function Customers({ customers, stats, filters }: Props) {
               </div>
               
               <Select value={tierFilter} onValueChange={setTierFilter}>
-                <SelectTrigger className="w-[180px]">
+                <SelectTrigger className="w-[200px]">
                   <Filter className="h-4 w-4 mr-2" />
-                  <SelectValue placeholder="Filtrar por tier" />
+                  <SelectValue placeholder="Filtrar" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">Todos los tiers</SelectItem>
+                  <SelectItem value="all">Todos los clientes</SelectItem>
+                  <SelectItem value="pending">⚠ Con deudas pendientes</SelectItem>
                   <SelectItem value="vip">⭐ VIP</SelectItem>
                   <SelectItem value="regular">🟢 Regular</SelectItem>
                   <SelectItem value="new">🆕 Nuevos</SelectItem>
@@ -390,6 +422,12 @@ function Customers({ customers, stats, filters }: Props) {
                         <Badge className={tierColors[customer.tier]}>
                           {tierLabels[customer.tier]}
                         </Badge>
+                        {customer.pending_orders_count && customer.pending_orders_count > 0 && (
+                          <Badge className="bg-yellow-500 text-black hover:bg-yellow-600">
+                            <AlertTriangle className="h-3 w-3 mr-1" />
+                            {customer.pending_orders_count} pendiente(s)
+                          </Badge>
+                        )}
                       </div>
                       <div className="text-xs text-muted-foreground space-y-0.5 ml-10">
                         {customer.email && (
@@ -408,6 +446,11 @@ function Customers({ customers, stats, filters }: Props) {
                         {customer.last_order_date && (
                           <p className="text-xs">
                             <span className="font-medium">Última orden:</span> {new Date(customer.last_order_date).toLocaleDateString('es-ES')}
+                          </p>
+                        )}
+                        {customer.pending_orders_count && customer.pending_orders_count > 0 && (
+                          <p className="text-xs text-yellow-500 font-medium">
+                            ⚠ Deuda pendiente: ${parseFloat(customer.pending_orders_amount || '0').toLocaleString('en-US', { minimumFractionDigits: 2 })} USD
                           </p>
                         )}
                       </div>

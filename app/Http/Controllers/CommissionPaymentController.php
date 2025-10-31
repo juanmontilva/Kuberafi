@@ -24,21 +24,36 @@ class CommissionPaymentController extends Controller
             ->orderBy('created_at', 'desc')
             ->paginate(20);
 
-        // Estadísticas
+        // Estadísticas detalladas
         $totalPending = CommissionPayment::where('status', 'pending')->sum('total_amount');
+        $totalCommissionPending = CommissionPayment::where('status', 'pending')->sum('commission_amount');
+        
         $totalOverdue = CommissionPayment::where('status', 'overdue')->sum('total_amount');
+        $totalCommissionOverdue = CommissionPayment::where('status', 'overdue')->sum('commission_amount');
+        
         $totalPaidThisMonth = CommissionPayment::where('status', 'paid')
             ->whereMonth('paid_at', now()->month)
             ->sum('total_amount');
+        $totalCommissionPaidThisMonth = CommissionPayment::where('status', 'paid')
+            ->whereMonth('paid_at', now()->month)
+            ->sum('commission_amount');
 
         $overdueCount = CommissionPayment::where('status', 'overdue')->count();
+        
+        // Total de comisiones acumuladas (lo que le deben a la plataforma)
+        $totalCommissionsOwed = CommissionPayment::whereIn('status', ['pending', 'overdue'])
+            ->sum('commission_amount');
 
         return Inertia::render('Admin/CommissionPayments', [
             'payments' => $payments,
             'stats' => [
                 'totalPending' => number_format($totalPending, 2),
+                'totalCommissionPending' => number_format($totalCommissionPending, 2),
                 'totalOverdue' => number_format($totalOverdue, 2),
+                'totalCommissionOverdue' => number_format($totalCommissionOverdue, 2),
                 'totalPaidThisMonth' => number_format($totalPaidThisMonth, 2),
+                'totalCommissionPaidThisMonth' => number_format($totalCommissionPaidThisMonth, 2),
+                'totalCommissionsOwed' => number_format($totalCommissionsOwed, 2),
                 'overdueCount' => $overdueCount,
             ],
         ]);
@@ -74,6 +89,23 @@ class CommissionPaymentController extends Controller
         );
 
         return back()->with('success', 'Pago marcado como completado exitosamente');
+    }
+
+    public function destroy(Request $request, CommissionPayment $commissionPayment)
+    {
+        $user = $request->user();
+        
+        if (!$user->isSuperAdmin()) {
+            abort(403);
+        }
+
+        if ($commissionPayment->status !== 'pending') {
+            return back()->withErrors(['error' => 'Solo se pueden eliminar pagos pendientes']);
+        }
+
+        $commissionPayment->delete();
+
+        return redirect()->route('admin.payments')->with('success', 'Pago eliminado exitosamente');
     }
 
     public function schedules(Request $request)
@@ -153,14 +185,17 @@ class CommissionPaymentController extends Controller
             ->get();
 
         $generated = 0;
+        $totalAmount = 0;
+        
         foreach ($schedules as $schedule) {
             $payment = $schedule->generatePayment();
             if ($payment) {
                 $generated++;
+                $totalAmount += $payment->total_amount;
             }
         }
 
-        return back()->with('success', "Se generaron {$generated} pagos automáticamente");
+        return back()->with('success', "Se generaron {$generated} pagos por un total de $" . number_format($totalAmount, 2));
     }
 
     public function dashboard(Request $request)

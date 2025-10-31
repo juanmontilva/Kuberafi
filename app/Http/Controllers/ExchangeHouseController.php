@@ -72,18 +72,70 @@ class ExchangeHouseController extends Controller
             abort(403);
         }
 
-        // OPTIMIZADO: Eager load con limit para evitar cargar todas las órdenes
+        // Cargar relaciones necesarias
         $exchangeHouse->load([
-            'users',
-            'orders' => function($query) {
-                $query->with('currencyPair')
-                    ->orderBy('created_at', 'desc')
-                    ->limit(20); // Solo las 20 más recientes
+            'users' => function($query) {
+                $query->select('id', 'name', 'email', 'role', 'is_active', 'exchange_house_id')
+                    ->orderBy('created_at', 'desc');
+            },
+            'currencyPairs' => function($query) {
+                $query->wherePivot('is_active', true)
+                    ->wherePivot('deleted_at', null)
+                    ->withPivot(['margin_percent', 'min_amount', 'max_amount', 'is_active']);
             }
         ]);
+
+        // Últimas 10 órdenes
+        $recentOrders = $exchangeHouse->orders()
+            ->with(['currencyPair', 'user'])
+            ->orderBy('created_at', 'desc')
+            ->limit(10)
+            ->get();
+
+        // Estadísticas del mes actual
+        $thisMonth = now()->startOfMonth();
+        $ordersThisMonth = $exchangeHouse->orders()
+            ->where('created_at', '>=', $thisMonth)
+            ->where('status', 'completed')
+            ->count();
         
+        $volumeThisMonth = $exchangeHouse->orders()
+            ->where('created_at', '>=', $thisMonth)
+            ->where('status', 'completed')
+            ->sum('base_amount');
+
+        $platformCommissionsThisMonth = $exchangeHouse->orders()
+            ->where('created_at', '>=', $thisMonth)
+            ->where('status', 'completed')
+            ->sum('platform_commission');
+
+        $exchangeCommissionsThisMonth = $exchangeHouse->orders()
+            ->where('created_at', '>=', $thisMonth)
+            ->where('status', 'completed')
+            ->sum('exchange_commission');
+
+        // Estadísticas de hoy
+        $ordersToday = $exchangeHouse->orders()
+            ->whereDate('created_at', today())
+            ->where('status', 'completed')
+            ->count();
+
+        $volumeToday = $exchangeHouse->orders()
+            ->whereDate('created_at', today())
+            ->where('status', 'completed')
+            ->sum('base_amount');
+
         return Inertia::render('Admin/ShowExchangeHouse', [
             'exchangeHouse' => $exchangeHouse,
+            'recentOrders' => $recentOrders,
+            'stats' => [
+                'orders_this_month' => $ordersThisMonth,
+                'volume_this_month' => $volumeThisMonth,
+                'platform_commissions_this_month' => $platformCommissionsThisMonth,
+                'exchange_commissions_this_month' => $exchangeCommissionsThisMonth,
+                'orders_today' => $ordersToday,
+                'volume_today' => $volumeToday,
+            ]
         ]);
     }
 
@@ -116,6 +168,7 @@ class ExchangeHouseController extends Controller
             'phone' => 'nullable|string|max:20',
             'address' => 'nullable|string|max:500',
             'commission_rate' => 'required|numeric|min:0|max:100',
+            'zero_commission_promo' => 'boolean',
             'daily_limit' => 'required|numeric|min:0',
             'allowed_currencies' => 'required|array|min:1',
             'is_active' => 'boolean',

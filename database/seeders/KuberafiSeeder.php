@@ -112,6 +112,7 @@ class KuberafiSeeder extends Seeder
             'quote_amount' => 38325.00, // Con margen del 5%
             'market_rate' => 36.50,
             'applied_rate' => 38.325, // Tasa con margen
+            'house_commission_percent' => 5.00, // Comisión de la casa
             'expected_margin_percent' => 5.00,
             'actual_margin_percent' => 3.00, // Margen real obtenido
             'status' => 'completed',
@@ -127,6 +128,7 @@ class KuberafiSeeder extends Seeder
             'quote_amount' => 20671.25, // Con margen del 4%
             'market_rate' => 39.75,
             'applied_rate' => 41.3425, // Tasa con margen
+            'house_commission_percent' => 4.00, // Comisión de la casa
             'expected_margin_percent' => 4.00,
             'actual_margin_percent' => 4.00, // Margen exacto
             'status' => 'completed',

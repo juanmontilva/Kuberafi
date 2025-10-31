@@ -4,21 +4,21 @@ import AppearanceTabs from '@/components/appearance-tabs';
 import HeadingSmall from '@/components/heading-small';
 import { type BreadcrumbItem } from '@/types';
 
-import AppLayout from '@/layouts/app-layout';
+import KuberafiLayout from '@/layouts/kuberafi-layout';
 import SettingsLayout from '@/layouts/settings/layout';
-import { edit as editAppearance } from '@/routes/appearance';
+// import { edit as editAppearance } from '@/routes/appearance';
 
 const breadcrumbs: BreadcrumbItem[] = [
     {
         title: 'Appearance settings',
-        href: editAppearance().url,
+        href: '/settings/appearance',
     },
 ];
 
 export default function Appearance() {
     return (
-        <AppLayout breadcrumbs={breadcrumbs}>
-            <Head title="Appearance settings" />
+        <KuberafiLayout>
+            <Head title="Configuración de Apariencia" />
 
             <SettingsLayout>
                 <div className="space-y-6">
@@ -29,6 +29,6 @@ export default function Appearance() {
                     <AppearanceTabs />
                 </div>
             </SettingsLayout>
-        </AppLayout>
+        </KuberafiLayout>
     );
 }

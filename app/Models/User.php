@@ -13,6 +13,11 @@ class User extends Authenticatable
     /** @use HasFactory<\Database\Factories\UserFactory> */
     use HasFactory, Notifiable, TwoFactorAuthenticatable;
 
+    // Constantes de roles
+    public const ROLE_SUPER_ADMIN = 'super_admin';
+    public const ROLE_EXCHANGE_HOUSE = 'exchange_house';
+    public const ROLE_OPERATOR = 'operator';
+
     /**
      * The attributes that are mass assignable.
      *
@@ -65,16 +70,21 @@ class User extends Authenticatable
 
     public function isSuperAdmin()
     {
-        return $this->role === 'super_admin';
+        return $this->role === self::ROLE_SUPER_ADMIN;
     }
 
     public function isExchangeHouse()
     {
-        return $this->role === 'exchange_house';
+        return $this->role === self::ROLE_EXCHANGE_HOUSE;
     }
 
     public function isOperator()
     {
-        return $this->role === 'operator';
+        return $this->role === self::ROLE_OPERATOR;
+    }
+
+    public function hasRole(...$roles)
+    {
+        return in_array($this->role, $roles);
     }
 }

@@ -9,7 +9,8 @@ import {
   Edit,
   Building2,
   Users,
-  DollarSign
+  DollarSign,
+  Tag
 } from 'lucide-react';
 
 interface ExchangeHouse {
@@ -18,6 +19,7 @@ interface ExchangeHouse {
   business_name: string;
   email: string;
   commission_rate: string;
+  zero_commission_promo: boolean;
   daily_limit: string;
   is_active: boolean;
   users_count: number;
@@ -124,6 +126,12 @@ function AdminExchangeHouses({ exchangeHouses }: Props) {
                         <Badge variant={house.is_active ? "default" : "secondary"}>
                           {house.is_active ? 'Activa' : 'Inactiva'}
                         </Badge>
+                        {house.zero_commission_promo && (
+                          <Badge variant="secondary" className="bg-purple-100 text-purple-800 border-purple-200">
+                            <Tag className="h-3 w-3 mr-1" />
+                            PROMO 0%
+                          </Badge>
+                        )}
                       </div>
                       <p className="text-xs text-muted-foreground">
                         {house.business_name} • {house.email}

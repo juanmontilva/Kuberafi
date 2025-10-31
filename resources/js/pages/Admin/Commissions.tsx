@@ -5,7 +5,8 @@ import KuberafiLayout from '@/layouts/kuberafi-layout';
 import { 
   DollarSign,
   Calendar,
-  TrendingUp
+  TrendingUp,
+  Tag
 } from 'lucide-react';
 
 interface Commission {
@@ -15,6 +16,7 @@ interface Commission {
   base_amount: string;
   status: string;
   created_at: string;
+  has_promo: boolean;
   order: {
     order_number: string;
     exchange_house: {
@@ -138,6 +140,12 @@ function AdminCommissions({ commissions, stats }: Props) {
                         <Badge className={getStatusColor(commission.status)}>
                           {getStatusText(commission.status)}
                         </Badge>
+                        {commission.has_promo && (
+                          <Badge className="bg-purple-100 text-purple-800 border-purple-200">
+                            <Tag className="h-3 w-3 mr-1" />
+                            Promoción 0%
+                          </Badge>
+                        )}
                       </div>
                       <p className="text-xs text-muted-foreground">
                         {commission.order.exchange_house.name} • {commission.order.currency_pair.symbol}

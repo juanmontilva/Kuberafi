@@ -14,6 +14,9 @@ class Order extends Model
         'exchange_house_id',
         'currency_pair_id',
         'payment_method_id',
+        'payment_method_in_id',
+        'payment_method_out_id',
+        'payment_method_selection_mode',
         'user_id',
         'customer_id',
         'base_amount',
@@ -30,6 +33,9 @@ class Order extends Model
         'status',
         'completed_at',
         'notes',
+        'cancellation_reason',
+        'cancelled_by',
+        'cancelled_at',
     ];
 
     protected $casts = [
@@ -45,6 +51,7 @@ class Order extends Model
         'exchange_commission' => 'decimal:2',
         'net_amount' => 'decimal:2',
         'completed_at' => 'datetime',
+        'cancelled_at' => 'datetime',
     ];
 
     public function exchangeHouse(): BelongsTo
@@ -67,9 +74,24 @@ class Order extends Model
         return $this->belongsTo(PaymentMethod::class);
     }
 
+    public function paymentMethodIn(): BelongsTo
+    {
+        return $this->belongsTo(PaymentMethod::class, 'payment_method_in_id');
+    }
+
+    public function paymentMethodOut(): BelongsTo
+    {
+        return $this->belongsTo(PaymentMethod::class, 'payment_method_out_id');
+    }
+
     public function customer(): BelongsTo
     {
         return $this->belongsTo(Customer::class);
+    }
+
+    public function cancelledBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'cancelled_by');
     }
 
     public function commissions(): HasMany
@@ -79,15 +101,32 @@ class Order extends Model
 
     public function calculateCommissions()
     {
+        // Validar que tenemos los datos necesarios
+        if (!$this->base_amount || !$this->house_commission_percent) {
+            throw new \Exception('Faltan datos para calcular comisiones');
+        }
+
         // Comisión total de la casa (ej: 5% = $50 de $1000)
         $houseCommissionAmount = $this->base_amount * ($this->house_commission_percent / 100);
         
-        // Comisión de la plataforma (ej: 0.16% = $1.60 de $1000)
-        $platformRate = SystemSetting::getPlatformCommissionRate() / 100;
-        $platformCommission = $this->base_amount * $platformRate;
+        // Verificar si la casa tiene promoción de 0 comisiones
+        $hasPromo = $this->exchangeHouse && $this->exchangeHouse->zero_commission_promo;
         
-        // Ganancia neta de la casa = Comisión total - Comisión plataforma
-        $exchangeCommission = $houseCommissionAmount - $platformCommission;
+        if ($hasPromo) {
+            // Con promoción: la casa no paga nada a la plataforma
+            $platformCommission = 0;
+            $exchangeCommission = $houseCommissionAmount; // La casa se queda con todo
+        } else {
+            // Sin promoción: cálculo normal
+            $platformRate = SystemSetting::getPlatformCommissionRate();
+            
+            if (!$platformRate || $platformRate <= 0) {
+                throw new \Exception('Tasa de comisión de plataforma no configurada');
+            }
+            
+            $platformCommission = $this->base_amount * ($platformRate / 100);
+            $exchangeCommission = $houseCommissionAmount - $platformCommission;
+        }
         
         // Monto neto que recibe el cliente
         $netAmount = $this->base_amount - $houseCommissionAmount;
@@ -102,8 +141,10 @@ class Order extends Model
         return [
             'house_total' => $houseCommissionAmount,
             'platform' => $platformCommission,
+            'exchange' => $exchangeCommission,
             'exchange_net' => $exchangeCommission,
             'client_receives' => $netAmount,
+            'has_promo' => $hasPromo,
         ];
     }
 
@@ -139,7 +180,7 @@ class Order extends Model
 
     public function scopeWithRelations(Builder $query): Builder
     {
-        return $query->with(['exchangeHouse', 'currencyPair', 'user']);
+        return $query->with(['exchangeHouse', 'currencyPair', 'user', 'customer']);
     }
 
     protected static function boot()

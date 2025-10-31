@@ -14,23 +14,30 @@ class CurrencyPairController extends Controller
     {
         $exchangeHouse = request()->user()->exchangeHouse;
 
-        // Pares que la casa tiene configurados
+        // Pares que la casa tiene configurados (excluyendo soft deleted)
         $activePairs = $exchangeHouse->currencyPairs()
+            ->wherePivotNull('deleted_at')
             ->withPivot(['margin_percent', 'min_amount', 'max_amount', 'is_active'])
             ->get();
 
-        // Pares disponibles que no ha configurado
+        // Pares disponibles que no ha configurado o que fueron eliminados (soft deleted)
+        $configuredPairIds = \App\Models\ExchangeHouseCurrencyPair::where('exchange_house_id', $exchangeHouse->id)
+            ->whereNull('deleted_at')
+            ->pluck('currency_pair_id');
+
         $availablePairs = CurrencyPair::where('is_active', true)
-            ->whereNotIn('id', $activePairs->pluck('id'))
+            ->whereNotIn('id', $configuredPairIds)
             ->get();
 
-        // Obtener comisión de plataforma
-        $platformCommissionRate = SystemSetting::getPlatformCommissionRate();
+        // Obtener comisión de plataforma (considerar promoción)
+        $platformCommissionRate = $exchangeHouse->zero_commission_promo 
+            ? 0 
+            : SystemSetting::getPlatformCommissionRate();
 
         return Inertia::render('ExchangeHouse/CurrencyPairs', [
             'activePairs' => $activePairs,
             'availablePairs' => $availablePairs,
-            'exchangeHouse' => $exchangeHouse, // Remover load innecesario si no se usa en frontend
+            'exchangeHouse' => $exchangeHouse,
             'platformCommissionRate' => $platformCommissionRate,
         ]);
     }
@@ -51,10 +58,32 @@ class CurrencyPairController extends Controller
             return redirect()->back()->withErrors(['error' => 'Este par ya está configurado']);
         }
 
+        // Validar que los límites de la casa no excedan los límites globales del super admin
+        $minAmount = $validated['min_amount'] ?? $currencyPair->min_amount;
+        $maxAmount = $validated['max_amount'] ?? $currencyPair->max_amount;
+
+        if ($minAmount < $currencyPair->min_amount) {
+            return redirect()->back()->withErrors([
+                'min_amount' => "El monto mínimo no puede ser menor a {$currencyPair->min_amount} (límite establecido por la plataforma)"
+            ]);
+        }
+
+        if ($currencyPair->max_amount && $maxAmount > $currencyPair->max_amount) {
+            return redirect()->back()->withErrors([
+                'max_amount' => "El monto máximo no puede ser mayor a {$currencyPair->max_amount} (límite establecido por la plataforma)"
+            ]);
+        }
+
+        if ($minAmount > $maxAmount) {
+            return redirect()->back()->withErrors([
+                'min_amount' => "El monto mínimo no puede ser mayor al monto máximo"
+            ]);
+        }
+
         $exchangeHouse->currencyPairs()->attach($currencyPair->id, [
             'margin_percent' => $validated['margin_percent'],
-            'min_amount' => $validated['min_amount'] ?? $currencyPair->min_amount,
-            'max_amount' => $validated['max_amount'] ?? $currencyPair->max_amount,
+            'min_amount' => $minAmount,
+            'max_amount' => $maxAmount,
             'is_active' => true,
         ]);
 
@@ -82,6 +111,25 @@ class CurrencyPairController extends Controller
 
         $exchangeHouse = request()->user()->exchangeHouse;
         $user = request()->user();
+
+        // Validar que los límites de la casa no excedan los límites globales del super admin
+        if ($validated['min_amount'] && $validated['min_amount'] < $currencyPair->min_amount) {
+            return redirect()->back()->withErrors([
+                'min_amount' => "El monto mínimo no puede ser menor a {$currencyPair->min_amount} (límite establecido por la plataforma)"
+            ]);
+        }
+
+        if ($validated['max_amount'] && $currencyPair->max_amount && $validated['max_amount'] > $currencyPair->max_amount) {
+            return redirect()->back()->withErrors([
+                'max_amount' => "El monto máximo no puede ser mayor a {$currencyPair->max_amount} (límite establecido por la plataforma)"
+            ]);
+        }
+
+        if ($validated['min_amount'] && $validated['max_amount'] && $validated['min_amount'] > $validated['max_amount']) {
+            return redirect()->back()->withErrors([
+                'min_amount' => "El monto mínimo no puede ser mayor al monto máximo"
+            ]);
+        }
 
         // Obtener configuración actual antes de actualizar
         $currentPivot = $exchangeHouse->currencyPairs()
@@ -158,15 +206,18 @@ class CurrencyPairController extends Controller
     {
         $exchangeHouse = request()->user()->exchangeHouse;
 
-        // Verificar si hay órdenes con este par - OPTIMIZADO
+        // Verificar si hay órdenes con este par
         if ($exchangeHouse->orders()->where('currency_pair_id', $currencyPair->id)->exists()) {
             return redirect()->back()->withErrors([
-                'error' => 'No puedes eliminar este par porque tienes órdenes asociadas. Desactívalo en su lugar.'
+                'error' => 'No puedes eliminar este par porque tienes órdenes asociadas. Los datos se mantendrán para el historial.'
             ]);
         }
 
-        $exchangeHouse->currencyPairs()->detach($currencyPair->id);
+        // Usar soft delete en lugar de detach
+        \App\Models\ExchangeHouseCurrencyPair::where('exchange_house_id', $exchangeHouse->id)
+            ->where('currency_pair_id', $currencyPair->id)
+            ->delete();
 
-        return redirect()->back()->with('success', "Par {$currencyPair->symbol} eliminado");
+        return redirect()->back()->with('success', "Par {$currencyPair->symbol} eliminado. Los datos históricos se mantienen.");
     }
 }

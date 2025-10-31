@@ -49,13 +49,13 @@ class SystemSettingsController extends Controller
         foreach ($validated['settings'] as $settingData) {
             Log::info("Procesando: {$settingData['key']} = {$settingData['value']} (tipo: {$settingData['type']})");
 
-            $setting = SystemSetting::set(
-                $settingData['key'],
-                $settingData['value'],
-                $settingData['type']
-            );
+            try {
+                SystemSetting::set(
+                    $settingData['key'],
+                    $settingData['value'],
+                    $settingData['type']
+                );
 
-            if ($setting) {
                 $updatedCount++;
 
                 // Verificar que se guardó correctamente
@@ -68,6 +68,8 @@ class SystemSettingsController extends Controller
                     $platformRate = SystemSetting::getPlatformCommissionRate();
                     Log::info("Platform commission rate después de actualizar: {$platformRate}");
                 }
+            } catch (\Exception $e) {
+                Log::error("Error al actualizar configuración {$settingData['key']}: " . $e->getMessage());
             }
         }
 
@@ -131,16 +133,24 @@ class SystemSettingsController extends Controller
 
         Log::info("Quick update: {$validated['key']} = {$validated['value']} (tipo: {$validated['type']})");
 
-        // Actualizar directamente
-        $setting = SystemSetting::set(
-            $validated['key'],
-            $validated['value'],
-            $validated['type']
-        );
+        try {
+            // Actualizar directamente
+            SystemSetting::set(
+                $validated['key'],
+                $validated['value'],
+                $validated['type']
+            );
 
-        // Verificar que se guardó
-        $savedValue = SystemSetting::get($validated['key']);
-        Log::info("Valor guardado: {$savedValue}");
+            // Verificar que se guardó
+            $savedValue = SystemSetting::get($validated['key']);
+            Log::info("Valor guardado: {$savedValue}");
+        } catch (\Exception $e) {
+            Log::error("Error en quick update: " . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Error al actualizar configuración: ' . $e->getMessage()
+            ], 500);
+        }
 
         // Limpiar cache completamente
         SystemSetting::clearCache();

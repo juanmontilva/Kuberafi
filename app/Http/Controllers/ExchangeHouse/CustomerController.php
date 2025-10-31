@@ -32,9 +32,16 @@ class CustomerController extends Controller
             });
         }
         
-        // Filtro por tier
+        // Filtro por tier o pendientes
         if ($request->filled('tier') && $request->tier !== 'all') {
-            $query->where('tier', $request->tier);
+            if ($request->tier === 'pending') {
+                // Filtrar solo clientes con órdenes pendientes
+                $query->whereHas('orders', function($q) {
+                    $q->where('status', 'pending');
+                });
+            } else {
+                $query->where('tier', $request->tier);
+            }
         }
         
         // Filtro por estado
@@ -48,7 +55,15 @@ class CustomerController extends Controller
             }
         }
         
-        $customers = $query->orderBy('total_volume', 'desc')->paginate(20);
+        $customers = $query
+            ->withCount(['orders as pending_orders_count' => function($q) {
+                $q->where('status', 'pending');
+            }])
+            ->withSum(['orders as pending_orders_amount' => function($q) {
+                $q->where('status', 'pending');
+            }], 'base_amount')
+            ->orderBy('total_volume', 'desc')
+            ->paginate(20);
         
         // OPTIMIZADO: Una sola query para contar por tier
         $tierStats = Customer::where('exchange_house_id', $exchangeHouseId)
@@ -62,6 +77,20 @@ class CustomerController extends Controller
             ')
             ->first();
         
+        // Contar clientes con órdenes pendientes
+        $customersWithPendingOrders = Customer::where('exchange_house_id', $exchangeHouseId)
+            ->whereHas('orders', function($q) {
+                $q->where('status', 'pending');
+            })
+            ->count();
+        
+        // Suma total de órdenes pendientes
+        $totalPendingAmount = \App\Models\Order::whereHas('customer', function($q) use ($exchangeHouseId) {
+                $q->where('exchange_house_id', $exchangeHouseId);
+            })
+            ->where('status', 'pending')
+            ->sum('base_amount');
+        
         $stats = [
             'total' => $tierStats->total,
             'vip' => $tierStats->vip,
@@ -69,6 +98,8 @@ class CustomerController extends Controller
             'new' => $tierStats->new,
             'inactive' => $tierStats->inactive,
             'total_volume' => $tierStats->total_volume,
+            'customers_with_pending' => $customersWithPendingOrders,
+            'total_pending_amount' => $totalPendingAmount,
         ];
         
         return Inertia::render('ExchangeHouse/Customers', [
@@ -127,10 +158,32 @@ class CustomerController extends Controller
             abort(403);
         }
         
-        // Cargar relaciones
-        $customer->load(['orders' => function($query) {
-            $query->latest()->limit(10);
-        }]);
+        // Cargar órdenes con paginación y ordenamiento especial
+        // Primero las pendientes, luego las completadas más recientes
+        $orders = $customer->orders()
+            ->with('currencyPair:id,symbol,base_currency,quote_currency')
+            ->orderByRaw("
+                CASE 
+                    WHEN status = 'pending' THEN 1
+                    WHEN status = 'processing' THEN 2
+                    WHEN status = 'completed' THEN 3
+                    WHEN status = 'cancelled' THEN 4
+                    WHEN status = 'failed' THEN 5
+                    ELSE 6
+                END
+            ")
+            ->orderBy('created_at', 'desc')
+            ->paginate(15)
+            ->withQueryString();
+        
+        // Agregar conteo de órdenes pendientes
+        $customer->pending_orders_count = $customer->orders()
+            ->where('status', 'pending')
+            ->count();
+        
+        $customer->pending_orders_amount = $customer->orders()
+            ->where('status', 'pending')
+            ->sum('base_amount');
         
         // Actividades con usuario que la creó
         $activities = $customer->activities()
@@ -138,9 +191,20 @@ class CustomerController extends Controller
             ->latest()
             ->paginate(20);
         
+        // Cargar cuentas bancarias
+        $bankAccounts = $customer->bankAccounts()->latest()->get();
+        
+        // Cargar divisas activas para el selector
+        $currencies = \App\Models\Currency::where('is_active', true)
+            ->orderBy('code')
+            ->get(['id', 'code', 'name', 'symbol']);
+        
         return Inertia::render('ExchangeHouse/CustomerDetail', [
             'customer' => $customer,
+            'orders' => $orders,
             'activities' => $activities,
+            'bankAccounts' => $bankAccounts,
+            'currencies' => $currencies,
         ]);
     }
 

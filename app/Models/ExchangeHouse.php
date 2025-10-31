@@ -16,6 +16,7 @@ class ExchangeHouse extends Model
         'phone',
         'address',
         'commission_rate',
+        'zero_commission_promo',
         'is_active',
         'allowed_currencies',
         'daily_limit',
@@ -24,6 +25,7 @@ class ExchangeHouse extends Model
     protected $casts = [
         'allowed_currencies' => 'array',
         'commission_rate' => 'decimal:4',
+        'zero_commission_promo' => 'boolean',
         'daily_limit' => 'decimal:2',
         'is_active' => 'boolean',
     ];
@@ -56,7 +58,8 @@ class ExchangeHouse extends Model
     public function currencyPairs(): BelongsToMany
     {
         return $this->belongsToMany(CurrencyPair::class, 'exchange_house_currency_pair')
-            ->withPivot(['margin_percent', 'min_amount', 'max_amount', 'is_active'])
+            ->using(ExchangeHouseCurrencyPair::class)
+            ->withPivot(['margin_percent', 'min_amount', 'max_amount', 'is_active', 'deleted_at'])
             ->withTimestamps();
     }
 

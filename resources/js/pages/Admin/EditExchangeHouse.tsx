@@ -15,7 +15,8 @@ import {
     ChevronRight,
     Home,
     List,
-    AlertCircle
+    AlertCircle,
+    Tag
 } from 'lucide-react';
 import { FormEventHandler } from 'react';
 
@@ -28,6 +29,7 @@ interface ExchangeHouse {
     phone?: string;
     address?: string;
     commission_rate: number;
+    zero_commission_promo: boolean;
     daily_limit: number;
     allowed_currencies: string[];
     is_active: boolean;
@@ -46,6 +48,7 @@ function EditExchangeHouse({ exchangeHouse }: Props) {
         phone: exchangeHouse.phone || '',
         address: exchangeHouse.address || '',
         commission_rate: exchangeHouse.commission_rate,
+        zero_commission_promo: exchangeHouse.zero_commission_promo,
         daily_limit: exchangeHouse.daily_limit,
         allowed_currencies: exchangeHouse.allowed_currencies,
         is_active: exchangeHouse.is_active,
@@ -278,6 +281,29 @@ function EditExchangeHouse({ exchangeHouse }: Props) {
                                     {errors.daily_limit && (
                                         <p className="text-sm text-red-500">{errors.daily_limit}</p>
                                     )}
+                                </div>
+
+                                <div className="flex items-center justify-between p-4 border-2 border-purple-200 bg-purple-50 rounded-lg">
+                                    <div className="space-y-1 flex-1">
+                                        <div className="flex items-center gap-2">
+                                            <Tag className="h-4 w-4 text-purple-600" />
+                                            <Label htmlFor="zero_commission_promo" className="text-base font-semibold text-purple-900">
+                                                Promoción 0 Comisiones
+                                            </Label>
+                                        </div>
+                                        <p className="text-sm text-purple-700">
+                                            La casa no pagará comisión a la plataforma. Se queda con el 100% de su comisión.
+                                        </p>
+                                    </div>
+                                    <div className="flex items-center space-x-2">
+                                        <input
+                                            type="checkbox"
+                                            id="zero_commission_promo"
+                                            checked={data.zero_commission_promo}
+                                            onChange={(e) => setData('zero_commission_promo', e.target.checked)}
+                                            className="h-5 w-5 rounded border-purple-300 text-purple-600 focus:ring-purple-500"
+                                        />
+                                    </div>
                                 </div>
                             </CardContent>
                         </Card>

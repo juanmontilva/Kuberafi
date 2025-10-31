@@ -37,8 +37,8 @@ class DashboardController extends Controller
         $lastMonth = Carbon::now()->subMonth()->startOfMonth();
         $thisYear = Carbon::now()->startOfYear();
         
-        // Cache key único por día
-        $cacheKey = 'dashboard_stats_' . $today->format('Y-m-d');
+        // Cache key único por día con namespace
+        $cacheKey = 'kuberafi:dashboard:super_admin:stats:' . $today->format('Y-m-d');
         $cacheTtl = config('performance.cache.dashboard_ttl', 300);
         
         // Usar cache para estadísticas básicas
@@ -183,7 +183,7 @@ class DashboardController extends Controller
             ? (($totalVolumeMonth - $totalVolumeLastMonth) / $totalVolumeLastMonth) * 100 
             : 0;
 
-        return Inertia::render('Dashboard/SuperAdmin', [
+        return Inertia::render('Dashboard/SuperAdminImproved', [
             'stats' => [
                 'totalExchangeHouses' => $totalExchangeHouses,
                 'totalUsers' => $totalUsers,
@@ -307,13 +307,15 @@ class DashboardController extends Controller
             ];
         });
 
-        // Distribución de uso por pares (% de operaciones)
+        // Distribución de uso por pares (% de operaciones) - TOP 6
         $pairUsageData = $exchangeHouse->orders()
             ->where('orders.created_at', '>=', $thisMonth)
             ->where('orders.status', 'completed')
             ->join('currency_pairs', 'orders.currency_pair_id', '=', 'currency_pairs.id')
             ->selectRaw('currency_pairs.symbol as name, COUNT(*) as value')
             ->groupBy('currency_pairs.symbol')
+            ->orderByDesc('value')
+            ->limit(6)
             ->get()
             ->map(function ($item, $index) {
                 $colors = ['#10b981', '#3b82f6', '#f59e0b', '#8b5cf6', '#ef4444', '#06b6d4'];
@@ -324,7 +326,7 @@ class DashboardController extends Controller
                 ];
             });
 
-        // Comisiones por par de divisas
+        // Comisiones por par de divisas - TOP 8
         $commissionsData = $exchangeHouse->orders()
             ->where('orders.created_at', '>=', $thisMonth)
             ->where('orders.status', 'completed')
@@ -332,6 +334,7 @@ class DashboardController extends Controller
             ->selectRaw('currency_pairs.symbol as pair, SUM(orders.exchange_commission) as comisiones, COUNT(*) as operaciones')
             ->groupBy('currency_pairs.symbol')
             ->orderByDesc('comisiones')
+            ->limit(8)
             ->get();
 
         // Distribución horaria de operaciones (últimos 30 días)
@@ -396,7 +399,20 @@ class DashboardController extends Controller
         $volumeYesterday = $comparisons->volume_yesterday;
         $commissionsLastMonth = $comparisons->commissions_last_month;
 
-        return Inertia::render('Dashboard/ExchangeHouseAdvanced', [
+        // ===== DEUDA A KUBERAFI =====
+        // Total de comisiones de plataforma pendientes de pago
+        $totalOwedToKuberafi = Commission::where('exchange_house_id', $exchangeHouse->id)
+            ->where('type', 'platform')
+            ->where('status', 'pending')
+            ->sum('amount');
+            
+        $totalOwedThisMonth = Commission::where('exchange_house_id', $exchangeHouse->id)
+            ->where('type', 'platform')
+            ->where('status', 'pending')
+            ->where('created_at', '>=', $thisMonth)
+            ->sum('amount');
+
+        return Inertia::render('Dashboard/ExchangeHouseSimple', [
             'exchangeHouse' => $exchangeHouse,
             'stats' => [
                 // 24 horas
@@ -425,6 +441,10 @@ class DashboardController extends Controller
                 // Promedios
                 'avgCommissionPercent' => $ordersMonth > 0 ? number_format($profitMonth / $ordersMonth, 2) : '0.00',
                 'avgProfitPerOrder' => $ordersMonth > 0 ? number_format($profitMonth / $ordersMonth, 2) : '0.00',
+                
+                // Deuda a Kuberafi
+                'owedToKuberafi' => number_format($totalOwedToKuberafi, 2),
+                'owedThisMonth' => number_format($totalOwedThisMonth, 2),
             ],
             'topPairs' => $topPairs,
             'profitChart' => $profitChart,
@@ -444,22 +464,144 @@ class DashboardController extends Controller
     private function operatorDashboard($user)
     {
         $today = Carbon::today();
+        $thisWeek = Carbon::now()->startOfWeek();
+        $thisMonth = Carbon::now()->startOfMonth();
+        $last24h = Carbon::now()->subHours(24);
         
-        // Órdenes del operador
-        $myOrdersToday = $user->orders()->whereDate('created_at', $today)->count();
-        $myVolumeToday = $user->orders()->whereDate('created_at', $today)->sum('base_amount');
+        // Estadísticas del día (OPTIMIZADO)
+        $statsToday = $user->orders()
+            ->whereDate('created_at', $today)
+            ->selectRaw('
+                COUNT(*) as orders_count,
+                COALESCE(SUM(CASE WHEN status = "completed" THEN 1 ELSE 0 END), 0) as completed_count,
+                COALESCE(SUM(CASE WHEN status = "pending" THEN 1 ELSE 0 END), 0) as pending_count,
+                COALESCE(SUM(base_amount), 0) as volume,
+                COALESCE(SUM(exchange_commission), 0) as commission
+            ')
+            ->first();
         
-        $recentOrders = $user->orders()
-            ->with(['exchangeHouse', 'currencyPair'])
-            ->orderBy('created_at', 'desc')
-            ->limit(10)
+        // Estadísticas de la semana
+        $statsWeek = $user->orders()
+            ->where('created_at', '>=', $thisWeek)
+            ->selectRaw('
+                COUNT(*) as orders_count,
+                COALESCE(SUM(base_amount), 0) as volume,
+                COALESCE(SUM(exchange_commission), 0) as commission
+            ')
+            ->first();
+        
+        // Estadísticas del mes
+        $statsMonth = $user->orders()
+            ->where('created_at', '>=', $thisMonth)
+            ->selectRaw('
+                COUNT(*) as orders_count,
+                COALESCE(SUM(base_amount), 0) as volume,
+                COALESCE(SUM(exchange_commission), 0) as commission
+            ')
+            ->first();
+        
+        // Evolución últimos 7 días
+        $dailyEvolution = $user->orders()
+            ->where('created_at', '>=', Carbon::now()->subDays(6)->startOfDay())
+            ->selectRaw('
+                DATE(created_at) as date,
+                COUNT(*) as orders,
+                SUM(base_amount) as volume,
+                SUM(exchange_commission) as commission
+            ')
+            ->groupBy('date')
+            ->orderBy('date')
+            ->get()
+            ->keyBy('date');
+        
+        // Mapear todos los días
+        $chartData = collect(range(6, 0))->map(function ($daysAgo) use ($dailyEvolution) {
+            $date = Carbon::now()->subDays($daysAgo);
+            $dateKey = $date->format('Y-m-d');
+            $stats = $dailyEvolution->get($dateKey);
+            
+            return [
+                'date' => $date->format('D d'),
+                'orders' => $stats ? (int) $stats->orders : 0,
+                'volume' => $stats ? (float) $stats->volume : 0,
+                'commission' => $stats ? (float) $stats->commission : 0,
+            ];
+        });
+        
+        // Top pares de divisas del operador
+        $topPairs = $user->orders()
+            ->join('currency_pairs', 'orders.currency_pair_id', '=', 'currency_pairs.id')
+            ->where('orders.created_at', '>=', $thisMonth)
+            ->where('orders.status', 'completed')
+            ->selectRaw('
+                currency_pairs.symbol,
+                COUNT(*) as total_orders,
+                SUM(orders.base_amount) as total_volume,
+                SUM(orders.exchange_commission) as total_commission
+            ')
+            ->groupBy('currency_pairs.symbol')
+            ->orderByDesc('total_volume')
+            ->limit(5)
             ->get();
+        
+        // Distribución por estado
+        $statusDistribution = $user->orders()
+            ->where('created_at', '>=', $thisMonth)
+            ->selectRaw('
+                status,
+                COUNT(*) as count,
+                SUM(base_amount) as volume
+            ')
+            ->groupBy('status')
+            ->get();
+        
+        // Órdenes recientes
+        $recentOrders = $user->orders()
+            ->with(['exchangeHouse', 'currencyPair', 'customer'])
+            ->orderBy('created_at', 'desc')
+            ->limit(8)
+            ->get();
+        
+        // Clientes atendidos este mes
+        $uniqueCustomers = $user->orders()
+            ->where('created_at', '>=', $thisMonth)
+            ->whereNotNull('customer_id')
+            ->distinct('customer_id')
+            ->count();
+        
+        // Tasa de conversión
+        $totalOrders = $statsMonth->orders_count;
+        $completedOrders = $user->orders()
+            ->where('created_at', '>=', $thisMonth)
+            ->where('status', 'completed')
+            ->count();
+        $conversionRate = $totalOrders > 0 ? ($completedOrders / $totalOrders) * 100 : 0;
 
         return Inertia::render('Dashboard/Operator', [
             'stats' => [
-                'myOrdersToday' => $myOrdersToday,
-                'myVolumeToday' => number_format($myVolumeToday, 2),
+                'today' => [
+                    'orders' => $statsToday->orders_count,
+                    'completed' => $statsToday->completed_count,
+                    'pending' => $statsToday->pending_count,
+                    'volume' => $statsToday->volume,
+                    'commission' => $statsToday->commission,
+                ],
+                'week' => [
+                    'orders' => $statsWeek->orders_count,
+                    'volume' => $statsWeek->volume,
+                    'commission' => $statsWeek->commission,
+                ],
+                'month' => [
+                    'orders' => $statsMonth->orders_count,
+                    'volume' => $statsMonth->volume,
+                    'commission' => $statsMonth->commission,
+                ],
+                'uniqueCustomers' => $uniqueCustomers,
+                'conversionRate' => round($conversionRate, 2),
             ],
+            'chartData' => $chartData,
+            'topPairs' => $topPairs,
+            'statusDistribution' => $statusDistribution,
             'recentOrders' => $recentOrders,
         ]);
     }
@@ -475,7 +617,12 @@ class DashboardController extends Controller
         $commissions = Commission::with(['order.exchangeHouse', 'order.currencyPair'])
             ->where('type', 'platform')
             ->orderBy('created_at', 'desc')
-            ->paginate(20);
+            ->paginate(20)
+            ->through(function ($commission) {
+                // Agregar información de promoción
+                $commission->has_promo = $commission->order->exchangeHouse->zero_commission_promo ?? false;
+                return $commission;
+            });
 
         $totalCommissions = Commission::where('type', 'platform')->sum('amount');
         $monthlyCommissions = Commission::where('type', 'platform')

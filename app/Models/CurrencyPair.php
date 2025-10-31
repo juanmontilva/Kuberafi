@@ -13,6 +13,7 @@ class CurrencyPair extends Model
         'quote_currency',
         'symbol',
         'current_rate',
+        'calculation_type',
         'min_amount',
         'max_amount',
         'is_active',
@@ -33,7 +34,8 @@ class CurrencyPair extends Model
     public function exchangeHouses(): BelongsToMany
     {
         return $this->belongsToMany(ExchangeHouse::class, 'exchange_house_currency_pair')
-            ->withPivot(['margin_percent', 'min_amount', 'max_amount', 'is_active'])
+            ->using(ExchangeHouseCurrencyPair::class)
+            ->withPivot(['margin_percent', 'min_amount', 'max_amount', 'is_active', 'deleted_at'])
             ->withTimestamps();
     }
 

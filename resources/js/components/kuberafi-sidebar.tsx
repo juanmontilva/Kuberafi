@@ -24,12 +24,21 @@ import {
     BarChart3,
     Settings,
     ArrowLeftRight,
-    CreditCard
+    CreditCard,
+    MessageSquare,
+    Target,
+    Wallet,
+    Coins
 } from 'lucide-react';
 import AppLogo from './app-logo';
 
 export function KuberafiSidebar() {
     const { user, isSuperAdmin, isExchangeHouse, isOperator } = useAuth();
+    
+    // Cerrar sidebar en móvil después de navegar
+    const handleNavigation = () => {
+        // El sidebar se cerrará automáticamente en móvil gracias al Sheet
+    };
 
     // Navegación para Super Admin
     const superAdminNavItems: NavItem[] = [
@@ -39,24 +48,9 @@ export function KuberafiSidebar() {
             icon: LayoutGrid,
         },
         {
-            title: 'Todas las Órdenes',
+            title: 'Órdenes',
             href: '/orders',
             icon: TrendingUp,
-        },
-        {
-            title: 'Pares de Divisas',
-            href: '/admin/currency-pairs',
-            icon: ArrowLeftRight,
-        },
-        {
-            title: 'Gestión de Pagos',
-            href: '/admin/payments/dashboard',
-            icon: DollarSign,
-        },
-        {
-            title: 'Comisiones Plataforma',
-            href: '/admin/commissions',
-            icon: FileText,
         },
         {
             title: 'Casas de Cambio',
@@ -64,17 +58,48 @@ export function KuberafiSidebar() {
             icon: Building2,
         },
         {
-            title: 'Gestión de Usuarios',
+            title: 'Usuarios',
             href: '/admin/users',
             icon: Users,
         },
         {
-            title: 'Reportes Avanzados',
+            title: 'Divisas',
+            href: '/admin/currencies',
+            icon: Coins,
+        },
+        {
+            title: 'Pares de Divisas',
+            href: '/admin/currency-pairs',
+            icon: ArrowLeftRight,
+        },
+        {
+            title: 'Solicitudes de Pago',
+            href: '/admin/commission-requests',
+            icon: DollarSign,
+            badge: 'important',
+        },
+        {
+            title: 'Comisiones',
+            href: '/admin/commissions',
+            icon: FileText,
+        },
+        {
+            title: 'Métodos de Pago',
+            href: '/admin/platform-payment-methods',
+            icon: CreditCard,
+        },
+        {
+            title: 'Reportes',
             href: '/admin/reports',
             icon: BarChart3,
         },
         {
-            title: 'Configuraciones',
+            title: 'Soporte',
+            href: '/tickets',
+            icon: MessageSquare,
+        },
+        {
+            title: 'Configuración',
             href: '/admin/settings',
             icon: Settings,
         },
@@ -93,19 +118,39 @@ export function KuberafiSidebar() {
             icon: TrendingUp,
         },
         {
-            title: 'Nueva Orden',
-            href: '/orders/create',
+            title: 'Finanzas',
+            href: '/cash-box',
             icon: DollarSign,
+            items: [
+                {
+                    title: 'Mi Fondo de Caja',
+                    href: '/cash-box',
+                },
+                {
+                    title: 'Cierre de Operaciones',
+                    href: '/operation-closure',
+                },
+                {
+                    title: 'Pagos a Kuberafi',
+                    href: '/my-commission-requests',
+                    badge: 'important',
+                },
+            ],
         },
         {
-            title: 'Pares',
+            title: 'Configuración',
             href: '/currency-pairs',
-            icon: ArrowLeftRight,
-        },
-        {
-            title: 'Métodos de Pago',
-            href: '/payment-methods',
-            icon: CreditCard,
+            icon: Settings,
+            items: [
+                {
+                    title: 'Pares de Divisas',
+                    href: '/currency-pairs',
+                },
+                {
+                    title: 'Métodos de Pago',
+                    href: '/payment-methods',
+                },
+            ],
         },
         {
             title: 'Mis Clientes',
@@ -113,18 +158,28 @@ export function KuberafiSidebar() {
             icon: Users,
         },
         {
-            title: 'Soporte',
-            href: '/tickets',
-            icon: FileText,
+            title: 'Rendimiento',
+            href: '/my-performance',
+            icon: Target,
+            items: [
+                {
+                    title: 'Mi Rendimiento',
+                    href: '/my-performance',
+                },
+                {
+                    title: 'Configurar Metas',
+                    href: '/performance-goals',
+                },
+            ],
         },
         {
-            title: 'Mis Comisiones',
-            href: '/my-commissions',
-            icon: FileText,
+            title: 'Soporte',
+            href: '/tickets',
+            icon: MessageSquare,
         },
     ];
 
-    // Navegación para Operador
+    // Navegación para Operador (MÁS LIMITADO que Casa de Cambio)
     const operatorNavItems: NavItem[] = [
         {
             title: 'Dashboard',
@@ -137,9 +192,29 @@ export function KuberafiSidebar() {
             icon: TrendingUp,
         },
         {
-            title: 'Nueva Orden',
-            href: '/orders/create',
-            icon: DollarSign,
+            title: 'Mi Fondo de Caja',
+            href: '/cash-box',
+            icon: Wallet,
+        },
+        {
+            title: 'Cierre de Operaciones',
+            href: '/operation-closure',
+            icon: FileText,
+        },
+        {
+            title: 'Mis Clientes',
+            href: '/customers',
+            icon: Users,
+        },
+        {
+            title: 'Mi Rendimiento',
+            href: '/my-performance',
+            icon: Target,
+        },
+        {
+            title: 'Soporte',
+            href: '/tickets',
+            icon: MessageSquare,
         },
     ];
 

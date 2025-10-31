@@ -39,6 +39,11 @@ interface Order {
   created_at: string;
   completed_at: string | null;
   notes: string | null;
+  cancellation_reason: string | null;
+  cancelled_at: string | null;
+  cancelled_by: {
+    name: string;
+  } | null;
   currency_pair: {
     symbol: string;
     base_currency: string;
@@ -58,12 +63,17 @@ interface Props {
 
 export default function ShowImproved({ order }: Props) {
   const [showCompleteModal, setShowCompleteModal] = useState(false);
+  const [showCancelModal, setShowCancelModal] = useState(false);
   
   const { data, setData, post, processing, errors, reset } = useForm({
     actual_rate: order.applied_rate,
     actual_quote_amount: order.quote_amount,
     actual_margin_percent: order.expected_margin_percent,
     notes: order.notes || '',
+  });
+
+  const { data: cancelData, setData: setCancelData, post: postCancel, processing: cancelProcessing, errors: cancelErrors, reset: resetCancel } = useForm({
+    cancellation_reason: '',
   });
 
   // Calcular margen real basado en el monto recibido
@@ -89,6 +99,17 @@ export default function ShowImproved({ order }: Props) {
       onSuccess: () => {
         setShowCompleteModal(false);
         reset();
+      },
+    });
+  };
+
+  const handleCancel = (e: React.FormEvent) => {
+    e.preventDefault();
+    postCancel(`/orders/${order.id}/cancel`, {
+      preserveScroll: true,
+      onSuccess: () => {
+        setShowCancelModal(false);
+        resetCancel();
       },
     });
   };
@@ -140,13 +161,14 @@ export default function ShowImproved({ order }: Props) {
           </div>
           
           {order.status === 'pending' && (
-            <Dialog open={showCompleteModal} onOpenChange={setShowCompleteModal}>
-              <DialogTrigger asChild>
-                <Button className="bg-emerald-500 hover:bg-emerald-600">
-                  <CheckCircle className="h-4 w-4 mr-2" />
-                  Completar Orden
-                </Button>
-              </DialogTrigger>
+            <div className="flex gap-2">
+              <Dialog open={showCompleteModal} onOpenChange={setShowCompleteModal}>
+                <DialogTrigger asChild>
+                  <Button className="bg-emerald-500 hover:bg-emerald-600">
+                    <CheckCircle className="h-4 w-4 mr-2" />
+                    Completar Orden
+                  </Button>
+                </DialogTrigger>
               <DialogContent className="bg-slate-900 border-slate-700">
                 <DialogHeader>
                   <DialogTitle className="text-white">Completar Orden</DialogTitle>
@@ -304,6 +326,72 @@ export default function ShowImproved({ order }: Props) {
                 </form>
               </DialogContent>
             </Dialog>
+
+            <Dialog open={showCancelModal} onOpenChange={setShowCancelModal}>
+              <DialogTrigger asChild>
+                <Button variant="destructive">
+                  <AlertCircle className="h-4 w-4 mr-2" />
+                  Cancelar Orden
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="bg-slate-900 border-slate-700">
+                <DialogHeader>
+                  <DialogTitle className="text-white">Cancelar Orden</DialogTitle>
+                  <DialogDescription className="text-gray-400">
+                    Explica el motivo de la cancelación. No se cobrará comisión por esta orden.
+                  </DialogDescription>
+                </DialogHeader>
+                
+                <form onSubmit={handleCancel} className="space-y-4">
+                  <div className="p-4 bg-red-500/10 border border-red-500/30 rounded-lg">
+                    <p className="text-sm text-red-300 font-medium mb-2">⚠️ Importante</p>
+                    <p className="text-xs text-gray-400">
+                      Al cancelar esta orden, no se generará comisión para Kuberafi. 
+                      Asegúrate de explicar claramente el motivo de la cancelación.
+                    </p>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="cancellation_reason" className="text-white">
+                      Motivo de Cancelación *
+                    </Label>
+                    <Textarea
+                      id="cancellation_reason"
+                      value={cancelData.cancellation_reason}
+                      onChange={(e) => setCancelData('cancellation_reason', e.target.value)}
+                      placeholder="Explica por qué se cancela esta orden (mínimo 10 caracteres)..."
+                      className="bg-slate-800 border-slate-700 text-white min-h-[100px]"
+                      required
+                    />
+                    {cancelErrors.cancellation_reason && (
+                      <p className="text-sm text-red-400">{cancelErrors.cancellation_reason}</p>
+                    )}
+                  </div>
+
+                  <DialogFooter>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => {
+                        setShowCancelModal(false);
+                        resetCancel();
+                      }}
+                      className="bg-slate-800 border-slate-700 text-white hover:bg-slate-700"
+                    >
+                      Cerrar
+                    </Button>
+                    <Button
+                      type="submit"
+                      disabled={cancelProcessing}
+                      variant="destructive"
+                    >
+                      {cancelProcessing ? 'Cancelando...' : 'Confirmar Cancelación'}
+                    </Button>
+                  </DialogFooter>
+                </form>
+              </DialogContent>
+            </Dialog>
+            </div>
           )}
         </div>
 
@@ -486,6 +574,24 @@ export default function ShowImproved({ order }: Props) {
                 <div className="pt-2 border-t border-slate-700">
                   <p className="text-gray-400 text-sm mb-1">Notas</p>
                   <p className="text-white text-sm bg-slate-800/50 p-3 rounded">{order.notes}</p>
+                </div>
+              )}
+              {order.status === 'cancelled' && order.cancellation_reason && (
+                <div className="pt-2 border-t border-slate-700">
+                  <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-4">
+                    <div className="flex items-start gap-2 mb-2">
+                      <AlertCircle className="h-5 w-5 text-red-400 flex-shrink-0 mt-0.5" />
+                      <div className="flex-1">
+                        <p className="text-red-400 font-semibold mb-1">Orden Cancelada</p>
+                        <p className="text-gray-300 text-sm mb-2">{order.cancellation_reason}</p>
+                        {order.cancelled_by && order.cancelled_at && (
+                          <p className="text-gray-400 text-xs">
+                            Cancelada por {order.cancelled_by.name} el {new Date(order.cancelled_at).toLocaleString('es-ES')}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
                 </div>
               )}
             </CardContent>

@@ -75,6 +75,18 @@ class PaymentSchedule extends Model
         $periodEnd = Carbon::now();
         $dueDate = $this->getNextPaymentDate();
 
+        // Verificar si ya existe un pago pendiente para este período
+        $existingPayment = CommissionPayment::where('exchange_house_id', $this->exchange_house_id)
+            ->where('status', 'pending')
+            ->where('period_start', '>=', $periodStart)
+            ->where('period_end', '<=', $periodEnd)
+            ->first();
+
+        if ($existingPayment) {
+            // Ya existe un pago para este período, no crear duplicado
+            return null;
+        }
+
         return CommissionPayment::create([
             'exchange_house_id' => $this->exchange_house_id,
             'total_amount' => $pendingCommissions,

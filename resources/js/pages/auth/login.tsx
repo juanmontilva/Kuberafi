@@ -26,13 +26,13 @@ export default function Login({ status, canResetPassword }: LoginProps) {
             <Form
                 {...AuthenticatedSessionController.store.form()}
                 resetOnSuccess={['password']}
-                className="flex flex-col gap-6"
+                className="flex flex-col gap-5 md:gap-6"
             >
                 {({ processing, errors }) => (
                     <>
-                        <div className="grid gap-6">
+                        <div className="grid gap-5 md:gap-6">
                             <div className="grid gap-2">
-                                <Label htmlFor="email">Email address</Label>
+                                <Label htmlFor="email" className="text-sm md:text-base">Email address</Label>
                                 <Input
                                     id="email"
                                     type="email"
@@ -42,17 +42,18 @@ export default function Login({ status, canResetPassword }: LoginProps) {
                                     tabIndex={1}
                                     autoComplete="email"
                                     placeholder="email@example.com"
+                                    className="h-11 md:h-10 text-sm md:text-base"
                                 />
                                 <InputError message={errors.email} />
                             </div>
 
                             <div className="grid gap-2">
                                 <div className="flex items-center">
-                                    <Label htmlFor="password">Password</Label>
+                                    <Label htmlFor="password" className="text-sm md:text-base">Password</Label>
                                     {canResetPassword && (
                                         <TextLink
                                             href={request()}
-                                            className="ml-auto text-sm"
+                                            className="ml-auto text-xs md:text-sm"
                                             tabIndex={5}
                                         >
                                             Forgot password?
@@ -67,6 +68,7 @@ export default function Login({ status, canResetPassword }: LoginProps) {
                                     tabIndex={2}
                                     autoComplete="current-password"
                                     placeholder="Password"
+                                    className="h-11 md:h-10 text-sm md:text-base"
                                 />
                                 <InputError message={errors.password} />
                             </div>
@@ -76,13 +78,14 @@ export default function Login({ status, canResetPassword }: LoginProps) {
                                     id="remember"
                                     name="remember"
                                     tabIndex={3}
+                                    className="h-5 w-5 md:h-4 md:w-4"
                                 />
-                                <Label htmlFor="remember">Remember me</Label>
+                                <Label htmlFor="remember" className="text-sm md:text-base">Remember me</Label>
                             </div>
 
                             <Button
                                 type="submit"
-                                className="mt-4 w-full"
+                                className="mt-2 md:mt-4 w-full h-12 md:h-10 text-sm md:text-base font-medium"
                                 tabIndex={4}
                                 disabled={processing}
                                 data-test="login-button"
@@ -94,7 +97,7 @@ export default function Login({ status, canResetPassword }: LoginProps) {
                             </Button>
                         </div>
 
-                        <div className="text-center text-sm text-muted-foreground">
+                        <div className="text-center text-xs md:text-sm text-muted-foreground">
                             ¿Necesitas acceso?{' '}
                             <span className="text-gray-500">
                                 Contacta al administrador

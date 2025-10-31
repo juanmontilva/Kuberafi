@@ -17,6 +17,10 @@ class Commission extends Model
         'status',
         'paid_at',
     ];
+    
+    protected $attributes = [
+        'status' => 'pending',
+    ];
 
     protected $casts = [
         'rate_percent' => 'decimal:4',

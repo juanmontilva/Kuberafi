@@ -35,6 +35,7 @@ interface PaymentMethod {
   daily_limit: string | null;
   min_amount: string | null;
   max_amount: string | null;
+  current_balance: number;
 }
 
 interface Stats {
@@ -43,8 +44,14 @@ interface Stats {
   by_currency: Record<string, number>;
 }
 
+interface Currency {
+  code: string;
+  name: string;
+}
+
 interface Props {
   paymentMethods: PaymentMethod[];
+  availableCurrencies: Currency[];
   stats: Stats;
 }
 
@@ -58,13 +65,13 @@ const paymentTypeOptions = [
   { value: 'other', label: '💳 Otro', icon: '💳' },
 ];
 
-function PaymentMethods({ paymentMethods, stats }: Props) {
+function PaymentMethods({ paymentMethods, availableCurrencies, stats }: Props) {
   const [showModal, setShowModal] = useState(false);
   const [editingMethod, setEditingMethod] = useState<PaymentMethod | null>(null);
   const [formData, setFormData] = useState({
     name: '',
     type: 'bank_transfer',
-    currency: 'USD',
+    currency: availableCurrencies.length > 0 ? availableCurrencies[0].code : '',
     account_holder: '',
     account_number: '',
     bank_name: '',
@@ -75,6 +82,7 @@ function PaymentMethods({ paymentMethods, stats }: Props) {
     daily_limit: '',
     min_amount: '',
     max_amount: '',
+    initial_balance: '',
   });
 
   const getTypeIcon = (type: string) => {
@@ -121,6 +129,7 @@ function PaymentMethods({ paymentMethods, stats }: Props) {
       daily_limit: method.daily_limit || '',
       min_amount: method.min_amount || '',
       max_amount: method.max_amount || '',
+      initial_balance: '', // No se puede editar el saldo inicial
     });
     setShowModal(true);
   };
@@ -140,7 +149,7 @@ function PaymentMethods({ paymentMethods, stats }: Props) {
     setFormData({
       name: '',
       type: 'bank_transfer',
-      currency: 'USD',
+      currency: availableCurrencies.length > 0 ? availableCurrencies[0].code : '',
       account_holder: '',
       account_number: '',
       bank_name: '',
@@ -151,6 +160,7 @@ function PaymentMethods({ paymentMethods, stats }: Props) {
       daily_limit: '',
       min_amount: '',
       max_amount: '',
+      initial_balance: '',
     });
   };
 
@@ -228,13 +238,24 @@ function PaymentMethods({ paymentMethods, stats }: Props) {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="USD">USD - Dólar Estadounidense</SelectItem>
-                      <SelectItem value="VES">VES - Bolívar Venezolano</SelectItem>
-                      <SelectItem value="EUR">EUR - Euro</SelectItem>
-                      <SelectItem value="USDT">USDT - Tether</SelectItem>
-                      <SelectItem value="BTC">BTC - Bitcoin</SelectItem>
+                      {availableCurrencies.length > 0 ? (
+                        availableCurrencies.map((currency) => (
+                          <SelectItem key={currency.code} value={currency.code}>
+                            {currency.code} - {currency.name}
+                          </SelectItem>
+                        ))
+                      ) : (
+                        <div className="p-4 text-center text-sm text-muted-foreground">
+                          No hay monedas disponibles. El Super Admin debe crear pares de divisas primero.
+                        </div>
+                      )}
                     </SelectContent>
                   </Select>
+                  {availableCurrencies.length === 0 && (
+                    <p className="text-xs text-amber-600">
+                      ⚠️ No hay pares de divisas configurados. Contacta al administrador.
+                    </p>
+                  )}
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
@@ -329,6 +350,74 @@ function PaymentMethods({ paymentMethods, stats }: Props) {
                     />
                   </div>
                 </div>
+
+                {!editingMethod ? (
+                  <div className="space-y-2 bg-blue-50 dark:bg-blue-950 p-4 rounded-lg border border-blue-200 dark:border-blue-800">
+                    <div className="flex items-center gap-2 mb-2">
+                      <DollarSign className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                      <Label htmlFor="initial_balance" className="text-blue-900 dark:text-blue-100 font-medium">
+                        💰 Saldo Inicial en Caja
+                      </Label>
+                    </div>
+                    <Input
+                      id="initial_balance"
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={formData.initial_balance}
+                      onChange={(e) => setFormData({...formData, initial_balance: e.target.value})}
+                      placeholder="0.00"
+                      className="bg-white dark:bg-gray-900"
+                    />
+                    <p className="text-xs text-blue-700 dark:text-blue-300">
+                      Establece el saldo inicial que tienes disponible en esta cuenta para operar. 
+                      Este saldo se registrará en tu fondo de caja.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-3 bg-green-50 dark:bg-green-950 p-4 rounded-lg border border-green-200 dark:border-green-800">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <DollarSign className="h-5 w-5 text-green-600 dark:text-green-400" />
+                        <div>
+                          <p className="text-sm font-medium text-green-900 dark:text-green-100">
+                            Saldo Actual en Caja
+                          </p>
+                          <p className="text-xs text-green-700 dark:text-green-300">
+                            Este es tu saldo disponible para operar
+                          </p>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <p className={`text-2xl font-bold ${
+                          editingMethod.current_balance >= 0 
+                            ? 'text-green-600 dark:text-green-400' 
+                            : 'text-red-600 dark:text-red-400'
+                        }`}>
+                          {editingMethod.currency} {editingMethod.current_balance.toLocaleString('en-US', { 
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2 
+                          })}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 pt-2 border-t border-green-200 dark:border-green-800">
+                      <AlertCircle className="h-4 w-4 text-green-600 dark:text-green-400" />
+                      <p className="text-xs text-green-700 dark:text-green-300 flex-1">
+                        Para ajustar este saldo, ve a <strong>"Mi Fondo de Caja"</strong> donde podrás registrar depósitos o retiros con trazabilidad completa.
+                      </p>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => router.visit('/cash-box')}
+                        className="shrink-0 border-green-600 text-green-700 hover:bg-green-100 dark:border-green-400 dark:text-green-300 dark:hover:bg-green-900"
+                      >
+                        Ir a Mi Fondo de Caja
+                      </Button>
+                    </div>
+                  </div>
+                )}
 
                 <div className="flex items-center space-x-4">
                   <label className="flex items-center space-x-2 cursor-pointer">
@@ -447,7 +536,7 @@ function PaymentMethods({ paymentMethods, stats }: Props) {
                 {methods.map((method) => (
                   <div key={method.id} className="flex items-center justify-between p-4 border rounded-lg hover:bg-muted/50">
                     <div className="space-y-1 flex-1">
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <span className="text-2xl">{getTypeIcon(method.type)}</span>
                         <p className="text-sm font-medium">{method.name}</p>
                         {method.is_default && (
@@ -455,6 +544,9 @@ function PaymentMethods({ paymentMethods, stats }: Props) {
                         )}
                         <Badge variant={method.is_active ? "default" : "secondary"}>
                           {method.is_active ? 'Activo' : 'Inactivo'}
+                        </Badge>
+                        <Badge variant="outline" className="bg-green-50 dark:bg-green-950 text-green-700 dark:text-green-300 border-green-200 dark:border-green-800">
+                          💰 Saldo: {method.currency} {method.current_balance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         </Badge>
                       </div>
                       <div className="text-xs text-muted-foreground space-y-0.5 ml-10">

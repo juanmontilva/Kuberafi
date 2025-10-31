@@ -1,6 +1,6 @@
 import PasswordController from '@/actions/App/Http/Controllers/Settings/PasswordController';
 import InputError from '@/components/input-error';
-import AppLayout from '@/layouts/app-layout';
+import KuberafiLayout from '@/layouts/kuberafi-layout';
 import SettingsLayout from '@/layouts/settings/layout';
 import { type BreadcrumbItem } from '@/types';
 import { Transition } from '@headlessui/react';
@@ -25,8 +25,8 @@ export default function Password() {
     const currentPasswordInput = useRef<HTMLInputElement>(null);
 
     return (
-        <AppLayout breadcrumbs={breadcrumbs}>
-            <Head title="Password settings" />
+        <KuberafiLayout>
+            <Head title="Configuración de Contraseña" />
 
             <SettingsLayout>
                 <div className="space-y-6">
@@ -141,6 +141,6 @@ export default function Password() {
                     </Form>
                 </div>
             </SettingsLayout>
-        </AppLayout>
+        </KuberafiLayout>
     );
 }

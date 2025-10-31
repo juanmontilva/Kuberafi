@@ -1,9 +1,15 @@
-import { Head, Link } from '@inertiajs/react';
+import { Head, Link, useForm, router } from '@inertiajs/react';
 import { PageProps } from '@/types';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Label } from '@/components/ui/label';
+import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Switch } from '@/components/ui/switch';
 import KuberafiLayout from '@/layouts/kuberafi-layout';
+import { useState } from 'react';
 import { 
     ArrowLeft, 
     Plus, 
@@ -19,6 +25,12 @@ import {
     Pause
 } from 'lucide-react';
 
+interface ExchangeHouse {
+    id: number;
+    name: string;
+    business_name: string;
+}
+
 interface PaymentSchedule {
     id: number;
     exchange_house_id: number;
@@ -29,18 +41,35 @@ interface PaymentSchedule {
     is_active: boolean;
     created_at: string;
     updated_at: string;
-    exchange_house?: {
-        id: number;
-        name: string;
-        business_name: string;
-    };
+    exchange_house?: ExchangeHouse;
 }
 
 interface Props extends PageProps {
     paymentSchedules: PaymentSchedule[];
+    exchangeHouses: ExchangeHouse[];
 }
 
-function PaymentSchedules({ paymentSchedules = [] }: Props) {
+function PaymentSchedules({ paymentSchedules = [], exchangeHouses = [] }: Props) {
+    const [isCreateOpen, setIsCreateOpen] = useState(false);
+    
+    const { data, setData, post, processing, errors, reset } = useForm({
+        exchange_house_id: '',
+        frequency: 'monthly',
+        payment_day: 1,
+        minimum_amount: 0,
+        auto_generate: true,
+    });
+
+    const handleSubmit = (e: React.FormEvent) => {
+        e.preventDefault();
+        post('/admin/payment-schedules', {
+            onSuccess: () => {
+                reset();
+                setIsCreateOpen(false);
+            },
+        });
+    };
+
     const getStatusColor = (isActive: boolean) => {
         return isActive 
             ? 'bg-green-100 text-green-800 border-green-200'
@@ -53,10 +82,10 @@ function PaymentSchedules({ paymentSchedules = [] }: Props) {
 
     const getFrequencyText = (frequency: string) => {
         switch (frequency) {
+            case 'daily': return 'Diario';
             case 'weekly': return 'Semanal';
+            case 'biweekly': return 'Quincenal';
             case 'monthly': return 'Mensual';
-            case 'quarterly': return 'Trimestral';
-            case 'yearly': return 'Anual';
             default: return frequency;
         }
     };
@@ -121,12 +150,118 @@ function PaymentSchedules({ paymentSchedules = [] }: Props) {
                                 Ver Pagos
                             </Link>
                         </Button>
-                        <Button asChild>
-                            <Link href="/admin/payment-schedules/create">
-                                <Plus className="h-4 w-4 mr-2" />
-                                Nuevo Cronograma
-                            </Link>
-                        </Button>
+                        <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
+                            <DialogTrigger asChild>
+                                <Button>
+                                    <Plus className="h-4 w-4 mr-2" />
+                                    Nuevo Cronograma
+                                </Button>
+                            </DialogTrigger>
+                            <DialogContent className="sm:max-w-[500px]">
+                                <DialogHeader>
+                                    <DialogTitle>Crear Cronograma de Pago</DialogTitle>
+                                    <DialogDescription>
+                                        Configura un cronograma automático para pagos de comisiones
+                                    </DialogDescription>
+                                </DialogHeader>
+                                <form onSubmit={handleSubmit} className="space-y-4">
+                                    <div className="space-y-2">
+                                        <Label htmlFor="exchange_house_id">Casa de Cambio</Label>
+                                        <Select
+                                            value={data.exchange_house_id}
+                                            onValueChange={(value) => setData('exchange_house_id', value)}
+                                        >
+                                            <SelectTrigger>
+                                                <SelectValue placeholder="Selecciona una casa de cambio" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                {exchangeHouses.map((house) => (
+                                                    <SelectItem key={house.id} value={house.id.toString()}>
+                                                        {house.name}
+                                                    </SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                        {errors.exchange_house_id && (
+                                            <p className="text-sm text-red-600">{errors.exchange_house_id}</p>
+                                        )}
+                                    </div>
+
+                                    <div className="space-y-2">
+                                        <Label htmlFor="frequency">Frecuencia</Label>
+                                        <Select
+                                            value={data.frequency}
+                                            onValueChange={(value) => setData('frequency', value)}
+                                        >
+                                            <SelectTrigger>
+                                                <SelectValue />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="daily">Diario</SelectItem>
+                                                <SelectItem value="weekly">Semanal</SelectItem>
+                                                <SelectItem value="biweekly">Quincenal</SelectItem>
+                                                <SelectItem value="monthly">Mensual</SelectItem>
+                                            </SelectContent>
+                                        </Select>
+                                        {errors.frequency && (
+                                            <p className="text-sm text-red-600">{errors.frequency}</p>
+                                        )}
+                                    </div>
+
+                                    <div className="space-y-2">
+                                        <Label htmlFor="payment_day">Día de Pago (1-31)</Label>
+                                        <Input
+                                            id="payment_day"
+                                            type="number"
+                                            min="1"
+                                            max="31"
+                                            value={data.payment_day}
+                                            onChange={(e) => setData('payment_day', parseInt(e.target.value))}
+                                        />
+                                        {errors.payment_day && (
+                                            <p className="text-sm text-red-600">{errors.payment_day}</p>
+                                        )}
+                                    </div>
+
+                                    <div className="space-y-2">
+                                        <Label htmlFor="minimum_amount">Monto Mínimo ($)</Label>
+                                        <Input
+                                            id="minimum_amount"
+                                            type="number"
+                                            step="0.01"
+                                            min="0"
+                                            value={data.minimum_amount}
+                                            onChange={(e) => setData('minimum_amount', parseFloat(e.target.value))}
+                                        />
+                                        {errors.minimum_amount && (
+                                            <p className="text-sm text-red-600">{errors.minimum_amount}</p>
+                                        )}
+                                    </div>
+
+                                    <div className="flex items-center justify-between">
+                                        <Label htmlFor="auto_generate">Generación Automática</Label>
+                                        <Switch
+                                            id="auto_generate"
+                                            checked={data.auto_generate}
+                                            onCheckedChange={(checked) => setData('auto_generate', checked)}
+                                        />
+                                    </div>
+
+                                    <div className="flex justify-end gap-3 pt-4">
+                                        <Button
+                                            type="button"
+                                            variant="outline"
+                                            onClick={() => setIsCreateOpen(false)}
+                                        >
+                                            Cancelar
+                                        </Button>
+                                        <Button type="submit" disabled={processing}>
+                                            {processing ? 'Creando...' : 'Crear Cronograma'}
+                                        </Button>
+                                    </div>
+                                </form>
+                            </DialogContent>
+                        </Dialog>
                     </div>
                 </div>
 
@@ -264,11 +399,9 @@ function PaymentSchedules({ paymentSchedules = [] }: Props) {
                                     <p className="text-muted-foreground mb-4">
                                         Crea tu primer cronograma de pago para automatizar las comisiones
                                     </p>
-                                    <Button asChild>
-                                        <Link href="/admin/payment-schedules/create">
-                                            <Plus className="mr-2 h-4 w-4" />
-                                            Crear Primer Cronograma
-                                        </Link>
+                                    <Button onClick={() => setIsCreateOpen(true)}>
+                                        <Plus className="mr-2 h-4 w-4" />
+                                        Crear Primer Cronograma
                                     </Button>
                                 </div>
                             )}

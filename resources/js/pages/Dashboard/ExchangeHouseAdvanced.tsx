@@ -1,4 +1,4 @@
-import { Head } from '@inertiajs/react';
+import { Head, Link, router } from '@inertiajs/react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -14,11 +14,9 @@ import {
   Activity,
   PieChart as PieChartIcon,
   Target,
-  Zap,
-  Users,
-  CreditCard,
+  Timer,
   BarChart3,
-  Timer
+  CreditCard
 } from 'lucide-react';
 import {
   LineChart,
@@ -63,6 +61,9 @@ interface Stats {
   volumeYesterday?: string;
   ordersYesterday?: number;
   commissionsLastMonth?: string;
+  owedToKuberafi: string;
+  owedThisMonth: string;
+  platformFeeMonth: string;
 }
 
 interface Order {
@@ -132,6 +133,17 @@ interface ProcessingSpeed {
   };
 }
 
+interface CommissionData {
+  pair: string;
+  comisiones: number;
+  operaciones: number;
+}
+
+interface HourlyData {
+  hora: string;
+  operaciones: number;
+}
+
 interface Props {
   exchangeHouse: ExchangeHouse;
   stats: Stats;
@@ -139,6 +151,8 @@ interface Props {
   currencyPairs: CurrencyPair[];
   volumeData?: VolumeData[];
   pairUsageData?: PairUsageData[];
+  commissionsData?: CommissionData[];
+  hourlyData?: HourlyData[];
 }
 
 function ExchangeHouseAdvanced({ 
@@ -147,7 +161,9 @@ function ExchangeHouseAdvanced({
   recentOrders, 
   currencyPairs,
   volumeData = [],
-  pairUsageData = []
+  pairUsageData = [],
+  commissionsData = [],
+  hourlyData = []
 }: Props) {
   const [marginAnalysis, setMarginAnalysis] = useState<MarginAnalysis[]>([]);
   const [paymentMethods, setPaymentMethods] = useState<PaymentMethodStats[]>([]);
@@ -176,13 +192,20 @@ function ExchangeHouseAdvanced({
     }
   };
 
-  const volumeChange = stats.volumeYesterday 
-    ? ((parseFloat(stats.volumeToday) - parseFloat(stats.volumeYesterday)) / parseFloat(stats.volumeYesterday) * 100).toFixed(2)
-    : '0';
-  
-  const ordersChange = stats.ordersYesterday
-    ? ((stats.ordersToday - stats.ordersYesterday) / stats.ordersYesterday * 100).toFixed(2)
-    : '0';
+  const calculateChange = (current: number | string, previous: number | string): string => {
+    const currentVal = typeof current === 'string' ? parseFloat(current) : current;
+    const previousVal = typeof previous === 'string' ? parseFloat(previous) : previous;
+    
+    if (!previousVal || previousVal === 0) {
+      return currentVal > 0 ? '+100' : '0';
+    }
+    
+    const change = ((currentVal - previousVal) / previousVal * 100);
+    return change.toFixed(2);
+  };
+
+  const volumeChange = calculateChange(stats.volumeToday, stats.volumeYesterday || '0');
+  const ordersChange = calculateChange(stats.ordersToday, stats.ordersYesterday || 0);
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -217,23 +240,26 @@ function ExchangeHouseAdvanced({
               Dashboard de Analytics Avanzado
             </p>
           </div>
-          <Button className="bg-white text-black hover:bg-gray-100">
+          <Button 
+            className="bg-white text-black hover:bg-gray-100"
+            onClick={() => router.visit('/orders/create')}
+          >
             <Plus className="mr-2 h-4 w-4" />
             Nueva Orden
           </Button>
         </div>
 
         {/* Stats Cards Principales */}
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-          <Card className="bg-black border-2 border-slate-700/50 hover:border-blue-500 transition-all duration-300">
+        <div className="grid gap-3 md:gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
+          <Card className="bg-black border-2 border-slate-700/50 hover:border-blue-500 transition-all duration-300 min-h-[120px] md:min-h-[140px]">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-gray-400">Órdenes Hoy</CardTitle>
+              <CardTitle className="text-xs md:text-sm font-medium text-gray-400">Órdenes Hoy</CardTitle>
               <div className="p-2 rounded-lg bg-blue-500/10">
-                <Clock className="h-4 w-4 text-blue-400" />
+                <Clock className="h-4 w-4 md:h-5 md:w-5 text-blue-400" />
               </div>
             </CardHeader>
             <CardContent>
-              <div className="text-3xl font-bold text-white">{stats.ordersToday}</div>
+              <div className="text-2xl md:text-3xl font-bold text-white">{stats.ordersToday}</div>
               <div className="flex items-center gap-1 mt-2">
                 {parseFloat(ordersChange) >= 0 ? (
                   <ArrowUpRight className="h-3 w-3 text-emerald-400" />
@@ -248,15 +274,15 @@ function ExchangeHouseAdvanced({
             </CardContent>
           </Card>
 
-          <Card className="bg-black border-2 border-blue-700/50 hover:border-blue-500 transition-all duration-300">
+          <Card className="bg-black border-2 border-blue-700/50 hover:border-blue-500 transition-all duration-300 min-h-[120px] md:min-h-[140px]">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-gray-400">Volumen Hoy</CardTitle>
+              <CardTitle className="text-xs md:text-sm font-medium text-gray-400">Volumen Hoy</CardTitle>
               <div className="p-2 rounded-lg bg-blue-500/10">
-                <DollarSign className="h-4 w-4 text-blue-400" />
+                <DollarSign className="h-4 w-4 md:h-5 md:w-5 text-blue-400" />
               </div>
             </CardHeader>
             <CardContent>
-              <div className="text-3xl font-bold text-white">${parseFloat(stats.volumeToday).toLocaleString()}</div>
+              <div className="text-2xl md:text-3xl font-bold text-white">${parseFloat(stats.volumeToday).toLocaleString()}</div>
               <div className="flex items-center gap-1 mt-2">
                 {parseFloat(volumeChange) >= 0 ? (
                   <TrendingUp className="h-3 w-3 text-emerald-400" />
@@ -270,28 +296,28 @@ function ExchangeHouseAdvanced({
             </CardContent>
           </Card>
 
-          <Card className="bg-black border-2 border-emerald-700/50 hover:border-emerald-500 transition-all duration-300">
+          <Card className="bg-black border-2 border-emerald-700/50 hover:border-emerald-500 transition-all duration-300 min-h-[120px] md:min-h-[140px]">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-gray-400">Comisiones Mes</CardTitle>
+              <CardTitle className="text-xs md:text-sm font-medium text-gray-400">Comisiones Mes</CardTitle>
               <div className="p-2 rounded-lg bg-emerald-500/10">
-                <Activity className="h-4 w-4 text-emerald-400" />
+                <Activity className="h-4 w-4 md:h-5 md:w-5 text-emerald-400" />
               </div>
             </CardHeader>
             <CardContent>
-              <div className="text-3xl font-bold text-emerald-400">${parseFloat(stats.commissionsMonth).toLocaleString()}</div>
+              <div className="text-2xl md:text-3xl font-bold text-emerald-400">${parseFloat(stats.commissionsMonth).toLocaleString()}</div>
               <p className="text-xs text-gray-500 mt-2">Tasa: {exchangeHouse.commission_rate}%</p>
             </CardContent>
           </Card>
 
-          <Card className="bg-black border-2 border-purple-700/50 hover:border-purple-500 transition-all duration-300">
+          <Card className="bg-black border-2 border-purple-700/50 hover:border-purple-500 transition-all duration-300 min-h-[120px] md:min-h-[140px]">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-gray-400">Límite Diario</CardTitle>
+              <CardTitle className="text-xs md:text-sm font-medium text-gray-400">Límite Diario</CardTitle>
               <div className="p-2 rounded-lg bg-purple-500/10">
-                <Target className="h-4 w-4 text-purple-400" />
+                <Target className="h-4 w-4 md:h-5 md:w-5 text-purple-400" />
               </div>
             </CardHeader>
             <CardContent>
-              <div className="text-3xl font-bold text-white">{stats.dailyLimitUsed}%</div>
+              <div className="text-2xl md:text-3xl font-bold text-white">{stats.dailyLimitUsed}%</div>
               <div className="mt-3 h-2 bg-slate-800/50 rounded-full overflow-hidden">
                 <div 
                   className="h-full bg-gradient-to-r from-purple-500 to-pink-500 transition-all duration-500"
@@ -443,54 +469,185 @@ function ExchangeHouseAdvanced({
           </Card>
         </div>
 
-        {/* Gráfica de Volumen (existente) */}
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          <Card className="md:col-span-2 bg-black border-2 border-slate-700/50">
+        {/* Gráficas Mejoradas */}
+        <div className="grid gap-4 md:grid-cols-2">
+          {/* Volumen y Órdenes Combinado */}
+          <Card className="bg-black border-2 border-slate-700/50">
             <CardHeader>
-              <CardTitle className="text-white">Volumen y Órdenes (Últimos 7 días)</CardTitle>
+              <CardTitle className="text-white flex items-center gap-2 text-base md:text-lg">
+                <Activity className="h-4 w-4 md:h-5 md:w-5 text-blue-400" />
+                Volumen y Órdenes (Últimos 7 días)
+              </CardTitle>
+              <CardDescription className="text-gray-400 text-xs md:text-sm">
+                Evolución diaria de operaciones
+              </CardDescription>
             </CardHeader>
             <CardContent>
-              <ResponsiveContainer width="100%" height={300}>
-                <AreaChart data={volumeData}>
+              <ResponsiveContainer width="100%" height={250} className="md:h-[300px]">
+                <ComposedChart data={volumeData} margin={{ top: 5, right: 5, left: -20, bottom: 5 }}>
                   <defs>
                     <linearGradient id="colorVolume" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.8}/>
-                      <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/>
+                      <stop offset="95%" stopColor="#3b82f6" stopOpacity={0.1}/>
                     </linearGradient>
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
                   <XAxis dataKey="date" stroke="#9ca3af" />
-                  <YAxis stroke="#9ca3af" />
-                  <Tooltip contentStyle={{ backgroundColor: '#000', border: '1px solid #475569', borderRadius: '8px' }} />
-                  <Area type="monotone" dataKey="volume" stroke="#3b82f6" fillOpacity={1} fill="url(#colorVolume)" />
-                </AreaChart>
+                  <YAxis yAxisId="left" stroke="#9ca3af" />
+                  <YAxis yAxisId="right" orientation="right" stroke="#9ca3af" />
+                  <Tooltip 
+                    contentStyle={{ 
+                      backgroundColor: '#1f2937', 
+                      border: '1px solid #475569', 
+                      borderRadius: '8px',
+                      color: '#fff'
+                    }} 
+                  />
+                  <Legend />
+                  <Area 
+                    yAxisId="left"
+                    type="monotone" 
+                    dataKey="volume" 
+                    stroke="#3b82f6" 
+                    fillOpacity={1} 
+                    fill="url(#colorVolume)"
+                    name="Volumen ($)"
+                  />
+                  <Bar 
+                    yAxisId="right"
+                    dataKey="orders" 
+                    fill="#10b981" 
+                    name="Órdenes"
+                    radius={[8, 8, 0, 0]}
+                  />
+                </ComposedChart>
               </ResponsiveContainer>
             </CardContent>
           </Card>
 
+          {/* Comisiones por Par */}
           <Card className="bg-black border-2 border-slate-700/50">
             <CardHeader>
-              <CardTitle className="text-white">Pares Más Usados</CardTitle>
+              <CardTitle className="text-white flex items-center gap-2 text-base md:text-lg">
+                <TrendingUp className="h-4 w-4 md:h-5 md:w-5 text-emerald-400" />
+                Top Pares por Comisiones
+              </CardTitle>
+              <CardDescription className="text-gray-400 text-xs md:text-sm">
+                Los 8 pares más rentables este mes
+              </CardDescription>
             </CardHeader>
             <CardContent>
-              <ResponsiveContainer width="100%" height={300}>
-                <PieChart>
-                  <Pie
-                    data={pairUsageData}
-                    cx="50%"
-                    cy="50%"
-                    outerRadius={70}
-                    fill="#8884d8"
-                    dataKey="value"
-                    label
-                  >
-                    {pairUsageData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={entry.color} />
-                    ))}
-                  </Pie>
-                  <Tooltip contentStyle={{ backgroundColor: '#000', border: '1px solid #475569' }} />
-                  <Legend />
-                </PieChart>
+              {commissionsData.length > 0 ? (
+                <ResponsiveContainer width="100%" height={250} className="md:h-[300px]">
+                  <BarChart data={commissionsData} layout="vertical">
+                    <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                    <XAxis type="number" stroke="#9ca3af" />
+                    <YAxis dataKey="pair" type="category" stroke="#9ca3af" width={80} />
+                    <Tooltip 
+                      contentStyle={{ 
+                        backgroundColor: '#1f2937', 
+                        border: '1px solid #475569', 
+                        borderRadius: '8px',
+                        color: '#fff'
+                      }} 
+                    />
+                    <Bar 
+                      dataKey="comisiones" 
+                      fill="#10b981" 
+                      name="Comisiones ($)"
+                      radius={[0, 8, 8, 0]}
+                    />
+                  </BarChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="flex items-center justify-center h-[300px] text-gray-500">
+                  No hay datos de comisiones este mes
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Segunda fila de gráficas */}
+        <div className="grid gap-4 grid-cols-1 md:grid-cols-3">
+          {/* Distribución de Pares */}
+          <Card className="bg-black border-2 border-slate-700/50">
+            <CardHeader>
+              <CardTitle className="text-white flex items-center gap-2 text-base md:text-lg">
+                <PieChartIcon className="h-4 w-4 md:h-5 md:w-5 text-purple-400" />
+                Top 6 Pares Más Usados
+              </CardTitle>
+              <CardDescription className="text-gray-400 text-xs md:text-sm">
+                % de operaciones por par
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {pairUsageData.length > 0 ? (
+                <ResponsiveContainer width="100%" height={250} className="md:h-[280px]">
+                  <PieChart>
+                    <Pie
+                      data={pairUsageData}
+                      cx="50%"
+                      cy="50%"
+                      labelLine={false}
+                      label={({ name, percent }: any) => `${name} ${(percent * 100).toFixed(0)}%`}
+                      outerRadius={80}
+                      fill="#8884d8"
+                      dataKey="value"
+                    >
+                      {pairUsageData.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={entry.color} />
+                      ))}
+                    </Pie>
+                    <Tooltip 
+                      contentStyle={{ 
+                        backgroundColor: '#1f2937', 
+                        border: '1px solid #475569',
+                        color: '#fff'
+                      }} 
+                    />
+                  </PieChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="flex items-center justify-center h-[280px] text-gray-500">
+                  No hay datos de pares este mes
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Actividad por Hora */}
+          <Card className="md:col-span-2 bg-black border-2 border-slate-700/50">
+            <CardHeader>
+              <CardTitle className="text-white flex items-center gap-2 text-base md:text-lg">
+                <Timer className="h-4 w-4 md:h-5 md:w-5 text-orange-400" />
+                Actividad por Hora del Día
+              </CardTitle>
+              <CardDescription className="text-gray-400 text-xs md:text-sm">
+                Distribución horaria de operaciones (últimos 30 días)
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="overflow-x-auto">
+              <ResponsiveContainer width="100%" height={250} className="md:h-[280px]">
+                <BarChart data={hourlyData}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                  <XAxis dataKey="hora" stroke="#9ca3af" angle={-45} textAnchor="end" height={80} />
+                  <YAxis stroke="#9ca3af" />
+                  <Tooltip 
+                    contentStyle={{ 
+                      backgroundColor: '#1f2937', 
+                      border: '1px solid #475569', 
+                      borderRadius: '8px',
+                      color: '#fff'
+                    }} 
+                  />
+                  <Bar 
+                    dataKey="operaciones" 
+                    fill="#f59e0b" 
+                    name="Operaciones"
+                    radius={[8, 8, 0, 0]}
+                  />
+                </BarChart>
               </ResponsiveContainer>
             </CardContent>
           </Card>

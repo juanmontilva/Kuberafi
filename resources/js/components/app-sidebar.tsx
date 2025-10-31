@@ -25,16 +25,17 @@ const mainNavItems: NavItem[] = [
 ];
 
 const footerNavItems: NavItem[] = [
-    {
-        title: 'Repository',
-        href: 'https://github.com/laravel/react-starter-kit',
-        icon: Folder,
-    },
-    {
-        title: 'Documentation',
-        href: 'https://laravel.com/docs/starter-kits#react',
-        icon: BookOpen,
-    },
+    // Enlaces deshabilitados - personalizar según necesidad
+    // {
+    //     title: 'Repository',
+    //     href: 'https://github.com/tu-organizacion/kuberafi',
+    //     icon: Folder,
+    // },
+    // {
+    //     title: 'Documentation',
+    //     href: 'https://kuberafi.com/docs',
+    //     icon: BookOpen,
+    // },
 ];
 
 export function AppSidebar() {
