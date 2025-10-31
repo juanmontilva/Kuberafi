@@ -62,8 +62,33 @@ class CustomerController extends Controller
             ->withSum(['orders as pending_orders_amount' => function($q) {
                 $q->where('status', 'pending');
             }], 'base_amount')
+            ->with(['orders' => function($q) {
+                $q->select('customer_id', 'currency_pair_id', \DB::raw('COUNT(*) as order_count'), \DB::raw('SUM(base_amount) as total_base_amount'))
+                    ->groupBy('customer_id', 'currency_pair_id')
+                    ->with('currencyPair:id,symbol,base_currency,quote_currency');
+            }])
             ->orderBy('total_volume', 'desc')
             ->paginate(20);
+        
+        // Transformar los datos para incluir volumen por par
+        $customers->getCollection()->transform(function ($customer) {
+            $volumeByPair = $customer->orders->map(function ($order) {
+                return [
+                    'currency_pair' => $order->currencyPair ? [
+                        'symbol' => $order->currencyPair->symbol,
+                        'base_currency' => $order->currencyPair->base_currency,
+                        'quote_currency' => $order->currencyPair->quote_currency,
+                    ] : null,
+                    'order_count' => $order->order_count,
+                    'total_base_amount' => $order->total_base_amount,
+                ];
+            });
+            
+            $customer->volume_by_pair = $volumeByPair;
+            unset($customer->orders); // Remover la relación orders para no enviar datos innecesarios
+            
+            return $customer;
+        });
         
         // OPTIMIZADO: Una sola query para contar por tier
         $tierStats = Customer::where('exchange_house_id', $exchangeHouseId)
@@ -184,6 +209,33 @@ class CustomerController extends Controller
         $customer->pending_orders_amount = $customer->orders()
             ->where('status', 'pending')
             ->sum('base_amount');
+        
+        // Calcular volumen por par de divisas
+        $volumeByPair = $customer->orders()
+            ->selectRaw('
+                currency_pair_id,
+                COUNT(*) as order_count,
+                SUM(base_amount) as total_base_amount,
+                SUM(quote_amount) as total_quote_amount
+            ')
+            ->groupBy('currency_pair_id')
+            ->with('currencyPair:id,symbol,base_currency,quote_currency')
+            ->get()
+            ->map(function ($item) {
+                return [
+                    'currency_pair' => $item->currencyPair ? [
+                        'id' => $item->currencyPair->id,
+                        'symbol' => $item->currencyPair->symbol,
+                        'base_currency' => $item->currencyPair->base_currency,
+                        'quote_currency' => $item->currencyPair->quote_currency,
+                    ] : null,
+                    'order_count' => $item->order_count,
+                    'total_base_amount' => $item->total_base_amount,
+                    'total_quote_amount' => $item->total_quote_amount,
+                ];
+            });
+        
+        $customer->volume_by_pair = $volumeByPair;
         
         // Actividades con usuario que la creó
         $activities = $customer->activities()

@@ -21,7 +21,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import KuberafiLayout from '@/layouts/kuberafi-layout';
-import { Users, TrendingUp, Star, UserX, Plus, Search, Filter, Eye, Trash2, MoreVertical, AlertTriangle } from 'lucide-react';
+import { Users, TrendingUp, Star, UserX, Plus, Search, Filter, Eye, Trash2, MoreVertical, AlertTriangle, Mail, Phone, ShoppingCart, Calendar } from 'lucide-react';
 import { useState } from 'react';
 import {
   DropdownMenu,
@@ -29,6 +29,16 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+
+interface VolumeByPair {
+  currency_pair: {
+    symbol: string;
+    base_currency: string;
+    quote_currency: string;
+  } | null;
+  order_count: number;
+  total_base_amount: string;
+}
 
 interface Customer {
   id: number;
@@ -42,6 +52,7 @@ interface Customer {
   last_order_date: string | null;
   pending_orders_count?: number;
   pending_orders_amount?: string;
+  volume_by_pair?: VolumeByPair[];
 }
 
 interface Stats {
@@ -334,18 +345,70 @@ function Customers({ customers, stats, filters }: Props) {
           </Card>
         </div>
 
-        {/* Volumen Total */}
-        <Card className="bg-gradient-to-br from-blue-900 to-blue-800">
+        {/* Volumen por Par de Divisas */}
+        <Card className="border-gray-800 bg-gradient-to-br from-gray-900 to-black">
           <CardHeader>
-            <CardTitle className="text-white">Volumen Total Operado</CardTitle>
-            <CardDescription className="text-blue-200">
-              Suma de todas las operaciones de tus clientes
+            <CardTitle className="text-lg text-white sm:text-xl">Volumen Total por Par</CardTitle>
+            <CardDescription className="text-xs text-gray-400 sm:text-sm">
+              Resumen del volumen operado (no se suman porque son divisas diferentes)
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="text-4xl font-bold text-white">
-              ${parseFloat(stats.total_volume.toString()).toLocaleString('en-US', { minimumFractionDigits: 2 })}
-            </div>
+            {(() => {
+              // Calcular volumen por par de todos los clientes
+              const volumeByPair = new Map<string, { base_amount: number; order_count: number; base_currency: string; quote_currency: string }>();
+              
+              customers.data.forEach(customer => {
+                customer.volume_by_pair?.forEach(volume => {
+                  if (volume.currency_pair) {
+                    const symbol = volume.currency_pair.symbol;
+                    const existing = volumeByPair.get(symbol) || { 
+                      base_amount: 0, 
+                      order_count: 0,
+                      base_currency: volume.currency_pair.base_currency,
+                      quote_currency: volume.currency_pair.quote_currency
+                    };
+                    existing.base_amount += parseFloat(volume.total_base_amount);
+                    existing.order_count += volume.order_count;
+                    volumeByPair.set(symbol, existing);
+                  }
+                });
+              });
+              
+              const sortedPairs = Array.from(volumeByPair.entries())
+                .sort((a, b) => b[1].base_amount - a[1].base_amount);
+              
+              return sortedPairs.length > 0 ? (
+                <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
+                  {sortedPairs.map(([symbol, data]) => (
+                    <div 
+                      key={symbol} 
+                      className="group relative overflow-hidden rounded-lg border border-blue-800/50 bg-gradient-to-br from-blue-950/50 to-blue-900/30 p-4 transition-all hover:border-blue-700 hover:shadow-lg"
+                    >
+                      <div className="mb-3 flex items-center justify-between">
+                        <span className="text-base font-bold text-blue-300 sm:text-lg">{symbol}</span>
+                        <Badge variant="outline" className="border-blue-700 text-xs text-blue-400">
+                          {data.order_count}
+                        </Badge>
+                      </div>
+                      <div className="text-2xl font-bold text-white sm:text-3xl">
+                        {data.base_amount.toLocaleString('en-US', { maximumFractionDigits: 0 })}
+                      </div>
+                      <div className="mt-1 text-xs font-medium text-blue-400">
+                        {data.base_currency}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="py-12 text-center">
+                  <Users className="mx-auto h-12 w-12 text-gray-600" />
+                  <p className="mt-2 text-sm text-gray-500">
+                    No hay operaciones registradas aún
+                  </p>
+                </div>
+              );
+            })()}
           </CardContent>
         </Card>
 
@@ -409,81 +472,143 @@ function Customers({ customers, stats, filters }: Props) {
                 </p>
               </div>
             ) : (
-              <div className="space-y-3">
+              <div className="space-y-4">
                 {customers.data.map((customer) => (
                   <div 
                     key={customer.id} 
-                    className="flex items-center justify-between p-4 border rounded-lg hover:bg-muted/50 transition-colors"
+                    className="group relative overflow-hidden rounded-xl border border-gray-800 bg-gradient-to-br from-gray-900 to-black p-4 transition-all hover:border-gray-700 hover:shadow-lg sm:p-6"
                   >
-                    <div className="space-y-1 flex-1">
-                      <div className="flex items-center gap-2">
-                        <span className="text-2xl">👤</span>
-                        <p className="text-sm font-medium">{customer.name}</p>
-                        <Badge className={tierColors[customer.tier]}>
-                          {tierLabels[customer.tier]}
-                        </Badge>
-                        {customer.pending_orders_count && customer.pending_orders_count > 0 && (
-                          <Badge className="bg-yellow-500 text-black hover:bg-yellow-600">
-                            <AlertTriangle className="h-3 w-3 mr-1" />
-                            {customer.pending_orders_count} pendiente(s)
-                          </Badge>
-                        )}
+                    {/* Header */}
+                    <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                      <div className="flex items-start gap-3">
+                        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-blue-500 to-blue-600 text-xl font-bold text-white sm:h-14 sm:w-14 sm:text-2xl">
+                          {customer.name.charAt(0).toUpperCase()}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <h3 className="text-lg font-bold text-white sm:text-xl">{customer.name}</h3>
+                          <div className="mt-1 flex flex-wrap gap-2">
+                            <Badge className={`${tierColors[customer.tier]} text-xs`}>
+                              {tierLabels[customer.tier]}
+                            </Badge>
+                            {customer.pending_orders_count && customer.pending_orders_count > 0 && (
+                              <Badge className="bg-yellow-500 text-xs text-black hover:bg-yellow-600">
+                                <AlertTriangle className="mr-1 h-3 w-3" />
+                                {customer.pending_orders_count} pendiente
+                              </Badge>
+                            )}
+                          </div>
+                        </div>
                       </div>
-                      <div className="text-xs text-muted-foreground space-y-0.5 ml-10">
+                      
+                      <div className="flex gap-2">
+                        <Button 
+                          variant="outline" 
+                          size="sm"
+                          onClick={() => handleViewCustomer(customer.id)}
+                          className="gap-2"
+                        >
+                          <Eye className="h-4 w-4" />
+                          Ver detalles
+                        </Button>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="sm">
+                              <MoreVertical className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem
+                              onClick={() => handleDeleteCustomer(customer.id, customer.name)}
+                              className="text-red-600 focus:text-red-600"
+                            >
+                              <Trash2 className="mr-2 h-4 w-4" />
+                              Eliminar
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
+                    </div>
+
+                    {/* Contacto */}
+                    {(customer.email || customer.phone) && (
+                      <div className="mb-4 flex flex-wrap gap-x-4 gap-y-1 text-sm text-gray-400">
                         {customer.email && (
-                          <p>📧 {customer.email}</p>
+                          <div className="flex items-center gap-1.5">
+                            <Mail className="h-3.5 w-3.5" />
+                            <span className="truncate">{customer.email}</span>
+                          </div>
                         )}
                         {customer.phone && (
-                          <p>📱 {customer.phone}</p>
-                        )}
-                        <p>
-                          <span className="font-medium">Volumen:</span> ${parseFloat(customer.total_volume).toLocaleString('en-US')} USD
-                          {' | '}
-                          <span className="font-medium">Órdenes:</span> {customer.total_orders}
-                          {' | '}
-                          <span className="font-medium">Puntos:</span> {customer.loyalty_points}
-                        </p>
-                        {customer.last_order_date && (
-                          <p className="text-xs">
-                            <span className="font-medium">Última orden:</span> {new Date(customer.last_order_date).toLocaleDateString('es-ES')}
-                          </p>
-                        )}
-                        {customer.pending_orders_count && customer.pending_orders_count > 0 && (
-                          <p className="text-xs text-yellow-500 font-medium">
-                            ⚠ Deuda pendiente: ${parseFloat(customer.pending_orders_amount || '0').toLocaleString('en-US', { minimumFractionDigits: 2 })} USD
-                          </p>
+                          <div className="flex items-center gap-1.5">
+                            <Phone className="h-3.5 w-3.5" />
+                            <span>{customer.phone}</span>
+                          </div>
                         )}
                       </div>
-                    </div>
-                    
-                    <div className="flex gap-2">
-                      <Button 
-                        variant="outline" 
-                        size="sm"
-                        onClick={() => handleViewCustomer(customer.id)}
-                        className="gap-2"
-                      >
-                        <Eye className="h-4 w-4" />
-                        Ver detalles
-                      </Button>
+                    )}
 
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="sm">
-                            <MoreVertical className="h-4 w-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem
-                            onClick={() => handleDeleteCustomer(customer.id, customer.name)}
-                            className="text-red-600 focus:text-red-600"
-                          >
-                            <Trash2 className="h-4 w-4 mr-2" />
-                            Eliminar
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
+                    {/* Volumen por Par */}
+                    <div className="mb-4">
+                      <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500">
+                        Volumen operado
+                      </p>
+                      {customer.volume_by_pair && customer.volume_by_pair.length > 0 ? (
+                        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                          {customer.volume_by_pair.map((volume, idx) => (
+                            volume.currency_pair && (
+                              <div 
+                                key={idx} 
+                                className="rounded-lg border border-blue-800/50 bg-blue-950/30 p-3"
+                              >
+                                <div className="mb-1 text-xs font-medium text-blue-400">
+                                  {volume.currency_pair.symbol}
+                                </div>
+                                <div className="text-lg font-bold text-white">
+                                  {parseFloat(volume.total_base_amount).toLocaleString('en-US', { maximumFractionDigits: 0 })}
+                                </div>
+                                <div className="text-xs text-gray-400">
+                                  {volume.currency_pair.base_currency}
+                                </div>
+                              </div>
+                            )
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-sm text-gray-500">Sin operaciones</p>
+                      )}
                     </div>
+
+                    {/* Stats */}
+                    <div className="flex flex-wrap gap-4 border-t border-gray-800 pt-3 text-sm">
+                      <div className="flex items-center gap-1.5">
+                        <ShoppingCart className="h-4 w-4 text-gray-500" />
+                        <span className="text-gray-400">
+                          {customer.total_orders} {customer.total_orders === 1 ? 'orden' : 'órdenes'}
+                        </span>
+                      </div>
+                      {customer.last_order_date && (
+                        <div className="flex items-center gap-1.5">
+                          <Calendar className="h-4 w-4 text-gray-500" />
+                          <span className="text-gray-400">
+                            Última: {new Date(customer.last_order_date).toLocaleDateString('es-ES', { 
+                              day: 'numeric', 
+                              month: 'short',
+                              year: 'numeric'
+                            })}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Alerta de deuda */}
+                    {customer.pending_orders_count && customer.pending_orders_count > 0 && (
+                      <div className="mt-3 flex items-center gap-2 rounded-lg border border-yellow-700/50 bg-yellow-900/20 p-3">
+                        <AlertTriangle className="h-4 w-4 shrink-0 text-yellow-500" />
+                        <p className="text-sm font-medium text-yellow-500">
+                          Deuda: ${parseFloat(customer.pending_orders_amount || '0').toLocaleString('en-US', { maximumFractionDigits: 0 })}
+                        </p>
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>

@@ -41,6 +41,18 @@ import {
 } from 'lucide-react';
 import { useState } from 'react';
 
+interface VolumeByPair {
+  currency_pair: {
+    id: number;
+    symbol: string;
+    base_currency: string;
+    quote_currency: string;
+  } | null;
+  order_count: number;
+  total_base_amount: string;
+  total_quote_amount: string;
+}
+
 interface Customer {
   id: number;
   name: string;
@@ -64,6 +76,7 @@ interface Customer {
   orders?: Order[];
   pending_orders_count?: number;
   pending_orders_amount?: string;
+  volume_by_pair?: VolumeByPair[];
 }
 
 interface Order {
@@ -514,64 +527,123 @@ function CustomerDetail({ customer, orders, activities, bankAccounts, currencies
           </div>
         </div>
 
-        {/* Stats Cards */}
-        <div className="grid gap-4 grid-cols-2 md:grid-cols-4">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Volumen Total</CardTitle>
-              <DollarSign className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">
-                ${parseFloat(customer.total_volume).toLocaleString('en-US')}
+        {/* Volumen por Par de Divisas */}
+        <Card className="border-gray-800 bg-gradient-to-br from-gray-900 to-black">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-lg text-white sm:text-xl">
+              <DollarSign className="h-5 w-5 shrink-0" />
+              <span>Volumen por Par de Divisas</span>
+            </CardTitle>
+            <CardDescription className="text-xs text-gray-400 sm:text-sm">
+              Desglose del volumen operado por cada par (no se suman porque son divisas diferentes)
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {customer.volume_by_pair && customer.volume_by_pair.length > 0 ? (
+              <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
+                {customer.volume_by_pair.map((volume, idx) => (
+                  volume.currency_pair && (
+                    <div 
+                      key={idx} 
+                      className="group relative overflow-hidden rounded-xl border border-blue-800/50 bg-gradient-to-br from-blue-950/50 to-blue-900/30 p-5 transition-all hover:border-blue-700 hover:shadow-lg"
+                    >
+                      {/* Header */}
+                      <div className="mb-4 flex items-center justify-between">
+                        <span className="text-xl font-bold text-blue-300">
+                          {volume.currency_pair.symbol}
+                        </span>
+                        <Badge variant="outline" className="border-blue-700 text-xs text-blue-400">
+                          {volume.order_count} {volume.order_count === 1 ? 'orden' : 'órdenes'}
+                        </Badge>
+                      </div>
+                      
+                      {/* Enviado */}
+                      <div className="mb-4">
+                        <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-blue-400/70">
+                          Enviado
+                        </div>
+                        <div className="flex items-baseline gap-2">
+                          <span className="text-2xl font-bold text-white sm:text-3xl">
+                            {parseFloat(volume.total_base_amount).toLocaleString('en-US', { maximumFractionDigits: 0 })}
+                          </span>
+                          <span className="text-sm font-medium text-blue-400">
+                            {volume.currency_pair.base_currency}
+                          </span>
+                        </div>
+                      </div>
+                      
+                      {/* Divider */}
+                      <div className="my-4 border-t border-gray-700/50"></div>
+                      
+                      {/* Recibido */}
+                      <div>
+                        <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-green-400/70">
+                          Recibido
+                        </div>
+                        <div className="flex items-baseline gap-2">
+                          <span className="text-2xl font-bold text-white sm:text-3xl">
+                            {parseFloat(volume.total_quote_amount).toLocaleString('en-US', { maximumFractionDigits: 0 })}
+                          </span>
+                          <span className="text-sm font-medium text-green-400">
+                            {volume.currency_pair.quote_currency}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  )
+                ))}
               </div>
-              <p className="text-xs text-muted-foreground">
-                Promedio: ${parseFloat(customer.average_order_value).toLocaleString('en-US')}
-              </p>
-            </CardContent>
-          </Card>
+            ) : (
+              <div className="py-12 text-center">
+                <DollarSign className="mx-auto h-12 w-12 text-gray-600" />
+                <p className="mt-2 text-sm text-gray-500">
+                  No hay operaciones registradas aún
+                </p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
 
-          <Card>
+        {/* Stats Cards */}
+        <div className="grid gap-4 grid-cols-1 sm:grid-cols-2">
+          <Card className="border-gray-800">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Total Órdenes</CardTitle>
               <ShoppingCart className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{customer.total_orders}</div>
+              <div className="text-3xl font-bold">{customer.total_orders}</div>
               {customer.last_order_date && (
-                <p className="text-xs text-muted-foreground">
-                  Última: {new Date(customer.last_order_date).toLocaleDateString('es-ES')}
+                <p className="text-xs text-muted-foreground mt-1">
+                  Última: {new Date(customer.last_order_date).toLocaleDateString('es-ES', {
+                    day: 'numeric',
+                    month: 'long',
+                    year: 'numeric'
+                  })}
                 </p>
               )}
               {customer.pending_orders_count && customer.pending_orders_count > 0 && (
-                <p className="text-xs text-yellow-500 mt-1">
-                  ⚠ {customer.pending_orders_count} pendiente(s)
-                </p>
+                <div className="mt-2 flex items-center gap-1 text-yellow-500">
+                  <span className="text-xs font-medium">
+                    ⚠ {customer.pending_orders_count} pendiente{customer.pending_orders_count > 1 ? 's' : ''}
+                  </span>
+                </div>
               )}
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className="border-gray-800">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Puntos de Lealtad</CardTitle>
-              <Star className="h-4 w-4 text-yellow-500" />
+              <CardTitle className="text-sm font-medium">Promedio por Orden</CardTitle>
+              <DollarSign className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{customer.loyalty_points}</div>
-              <p className="text-xs text-muted-foreground">Disponibles</p>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Estado KYC</CardTitle>
-              <User className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <Badge variant={customer.kyc_status === 'verified' ? 'default' : 'secondary'}>
-                {customer.kyc_status === 'verified' ? '✓ Verificado' : 
-                 customer.kyc_status === 'rejected' ? '✗ Rechazado' : '⏳ Pendiente'}
-              </Badge>
+              <div className="text-3xl font-bold">
+                ${parseFloat(customer.average_order_value).toLocaleString('en-US', { maximumFractionDigits: 0 })}
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">
+                Valor promedio de operación
+              </p>
             </CardContent>
           </Card>
         </div>
