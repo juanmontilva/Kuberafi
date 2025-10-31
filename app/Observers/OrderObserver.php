@@ -29,80 +29,70 @@ class OrderObserver
         try {
             DB::beginTransaction();
 
-            // Obtener el par de divisas
-            $currencyPair = $order->currencyPair;
+            // Cargar relaciones necesarias
+            $order->loadMissing(['paymentMethodIn', 'paymentMethodOut', 'currencyPair']);
             
-            // Determinar qué moneda entra y cuál sale
-            $baseCurrency = $currencyPair->base_currency; // USD
-            $quoteCurrency = $currencyPair->quote_currency; // VES
-            
-            // Buscar método de pago para la moneda base (la que recibe)
-            $paymentMethodIn = \App\Models\PaymentMethod::where('exchange_house_id', $order->exchange_house_id)
-                ->where('currency', $baseCurrency)
-                ->where('is_active', true)
-                ->first();
-            
-            if (!$paymentMethodIn) {
-                Log::warning("No hay método de pago activo para {$baseCurrency} en casa de cambio {$order->exchange_house_id}");
+            // Validar que existan los métodos de pago
+            if (!$order->paymentMethodIn || !$order->paymentMethodOut) {
+                Log::error("Orden #{$order->order_number} no tiene métodos de pago asignados");
                 DB::rollBack();
                 return;
             }
 
-            // Buscar método de pago para la moneda cotizada (la que entrega)
-            $paymentMethodOut = \App\Models\PaymentMethod::where('exchange_house_id', $order->exchange_house_id)
-                ->where('currency', $quoteCurrency)
-                ->where('is_active', true)
-                ->first();
+            $paymentMethodIn = $order->paymentMethodIn;
+            $paymentMethodOut = $order->paymentMethodOut;
             
-            if (!$paymentMethodOut) {
-                Log::warning("No hay método de pago activo para {$quoteCurrency} en casa de cambio {$order->exchange_house_id}");
-                DB::rollBack();
-                return;
-            }
+            // LÓGICA CORRECTA:
+            // payment_method_in = Cuenta que RECIBE del cliente (el cliente te paga con esto)
+            // payment_method_out = Cuenta que ENTREGA al cliente (tú le pagas con esto)
+            
+            // Ejemplo: Cliente te da 100 USD, tú le entregas 28,310 VES
+            // - Tu saldo USD debe AUMENTAR (+100)
+            // - Tu saldo VES debe DISMINUIR (-28,310)
 
-            // ENTRADA: El operador recibe la moneda base (USD)
+            // ENTRADA: El operador RECIBE la moneda base del cliente
             $balanceIn = OperatorCashBalance::firstOrCreate(
                 [
                     'operator_id' => $order->user_id,
                     'payment_method_id' => $paymentMethodIn->id,
-                    'currency' => $baseCurrency,
+                    'currency' => $paymentMethodIn->currency,
                 ],
                 ['balance' => 0]
             );
 
             $balanceIn->increment(
                 $order->base_amount,
-                "Orden #{$order->order_number} - Cliente pagó {$baseCurrency}",
+                "Orden #{$order->order_number} - Recibido de cliente: {$order->base_amount} {$paymentMethodIn->currency}",
                 $order->id,
                 'order_in'
             );
 
-            // SALIDA: El operador entrega la moneda cotizada (VES)
+            // SALIDA: El operador ENTREGA la moneda cotizada al cliente
             $balanceOut = OperatorCashBalance::firstOrCreate(
                 [
                     'operator_id' => $order->user_id,
                     'payment_method_id' => $paymentMethodOut->id,
-                    'currency' => $quoteCurrency,
+                    'currency' => $paymentMethodOut->currency,
                 ],
                 ['balance' => 0]
             );
 
             // Verificar que hay suficiente saldo
             if ($balanceOut->balance < $order->quote_amount) {
-                Log::warning("Operador {$order->user->name} no tiene suficiente saldo en {$quoteCurrency}. Necesita: {$order->quote_amount}, Tiene: {$balanceOut->balance}");
+                Log::warning("Operador {$order->user->name} no tiene suficiente saldo en {$paymentMethodOut->currency}. Necesita: {$order->quote_amount}, Tiene: {$balanceOut->balance}");
                 // Continuar de todas formas, pero registrar el saldo negativo
             }
 
             $balanceOut->decrement(
                 $order->quote_amount,
-                "Orden #{$order->order_number} - Entregado {$quoteCurrency} a cliente",
+                "Orden #{$order->order_number} - Entregado a cliente: {$order->quote_amount} {$paymentMethodOut->currency}",
                 $order->id,
                 'order_out'
             );
 
             DB::commit();
 
-            Log::info("Saldos actualizados para orden #{$order->order_number}. Operador: {$order->user->name}. Método IN: {$paymentMethodIn->name}, Método OUT: {$paymentMethodOut->name}");
+            Log::info("Saldos actualizados para orden #{$order->order_number}. Operador: {$order->user->name}. Recibió: {$order->base_amount} {$paymentMethodIn->currency} ({$paymentMethodIn->name}), Entregó: {$order->quote_amount} {$paymentMethodOut->currency} ({$paymentMethodOut->name})");
 
         } catch (\Exception $e) {
             DB::rollBack();

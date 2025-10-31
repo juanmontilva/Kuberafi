@@ -7,6 +7,7 @@ use App\Http\Requests\StoreCustomerRequest;
 use App\Models\Customer;
 use App\Models\CustomerActivity;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 
 class CustomerController extends Controller
@@ -63,7 +64,7 @@ class CustomerController extends Controller
                 $q->where('status', 'pending');
             }], 'base_amount')
             ->with(['orders' => function($q) {
-                $q->select('customer_id', 'currency_pair_id', \DB::raw('COUNT(*) as order_count'), \DB::raw('SUM(base_amount) as total_base_amount'))
+                $q->select('customer_id', 'currency_pair_id', DB::raw('COUNT(*) as order_count'), DB::raw('SUM(base_amount) as total_base_amount'))
                     ->groupBy('customer_id', 'currency_pair_id')
                     ->with('currencyPair:id,symbol,base_currency,quote_currency');
             }])
@@ -183,10 +184,14 @@ class CustomerController extends Controller
             abort(403);
         }
         
-        // Cargar órdenes con paginación y ordenamiento especial
-        // Primero las pendientes, luego las completadas más recientes
+        // OPTIMIZADO: Cargar órdenes con todas las relaciones necesarias
         $orders = $customer->orders()
-            ->with('currencyPair:id,symbol,base_currency,quote_currency')
+            ->with([
+                'currencyPair:id,symbol,base_currency,quote_currency',
+                'user:id,name',
+                'paymentMethodIn:id,name,currency',
+                'paymentMethodOut:id,name,currency'
+            ])
             ->orderByRaw("
                 CASE 
                     WHEN status = 'pending' THEN 1

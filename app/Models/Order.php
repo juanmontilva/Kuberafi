@@ -180,7 +180,15 @@ class Order extends Model
 
     public function scopeWithRelations(Builder $query): Builder
     {
-        return $query->with(['exchangeHouse', 'currencyPair', 'user', 'customer']);
+        return $query->with([
+            'exchangeHouse:id,name',
+            'currencyPair:id,symbol,base_currency,quote_currency',
+            'user:id,name,email',
+            'customer:id,name,email,phone',
+            'paymentMethodIn:id,name,currency',
+            'paymentMethodOut:id,name,currency',
+            'cancelledBy:id,name'
+        ]);
     }
 
     protected static function boot()

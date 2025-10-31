@@ -742,7 +742,7 @@ function CreateOrder({ currencyPairs, platformCommissionRate, customers, operato
                       <h4 className="font-bold text-white text-sm">Control de Saldo</h4>
                     </div>
                     
-                    {/* Base Currency Balance */}
+                    {/* Base Currency Balance - LO QUE RECIBES DEL CLIENTE */}
                     <div className="rounded-xl bg-gradient-to-br from-blue-500/10 to-blue-600/5 border border-blue-500/30 p-4">
                       <div className="space-y-2 text-sm">
                         <div className="flex justify-between items-center">
@@ -755,19 +755,19 @@ function CreateOrder({ currencyPairs, platformCommissionRate, customers, operato
                           </span>
                         </div>
                         <div className="flex justify-between items-center">
-                          <span className="text-blue-300">Entregas al cliente:</span>
-                          <span className="font-bold text-red-400">
-                            -{parseFloat(data.base_amount).toFixed(2)}
+                          <span className="text-blue-300">Recibes del cliente:</span>
+                          <span className="font-bold text-green-400">
+                            +{parseFloat(data.base_amount).toFixed(2)}
                           </span>
                         </div>
                         <div className="flex justify-between items-center border-t border-blue-500/30 pt-2">
                           <span className="text-blue-200 font-semibold">Saldo Final:</span>
                           <span className={`font-black text-lg ${
-                            (Number(getBalanceForCurrency(selectedPair.base_currency)) - Number(data.base_amount)) < 0 
+                            (Number(getBalanceForCurrency(selectedPair.base_currency)) + Number(data.base_amount)) < 0 
                               ? 'text-red-400' 
                               : 'text-green-400'
                           }`}>
-                            {(Number(getBalanceForCurrency(selectedPair.base_currency)) - Number(data.base_amount)).toLocaleString('en-US', { 
+                            {(Number(getBalanceForCurrency(selectedPair.base_currency)) + Number(data.base_amount)).toLocaleString('en-US', { 
                               minimumFractionDigits: 2,
                               maximumFractionDigits: 2 
                             })}
@@ -776,7 +776,7 @@ function CreateOrder({ currencyPairs, platformCommissionRate, customers, operato
                       </div>
                     </div>
 
-                    {/* Quote Currency Balance */}
+                    {/* Quote Currency Balance - LO QUE ENTREGAS AL CLIENTE */}
                     <div className="rounded-xl bg-gradient-to-br from-purple-500/10 to-purple-600/5 border border-purple-500/30 p-4">
                       <div className="space-y-2 text-sm">
                         <div className="flex justify-between items-center">
@@ -789,19 +789,19 @@ function CreateOrder({ currencyPairs, platformCommissionRate, customers, operato
                           </span>
                         </div>
                         <div className="flex justify-between items-center">
-                          <span className="text-purple-300">Recibes del cliente:</span>
-                          <span className="font-bold text-green-400">
-                            +{calculatedQuote.toFixed(2)}
+                          <span className="text-purple-300">Entregas al cliente:</span>
+                          <span className="font-bold text-red-400">
+                            -{calculatedQuote.toFixed(2)}
                           </span>
                         </div>
                         <div className="flex justify-between items-center border-t border-purple-500/30 pt-2">
                           <span className="text-purple-200 font-semibold">Saldo Final:</span>
                           <span className={`font-black text-lg ${
-                            (Number(getBalanceForCurrency(selectedPair.quote_currency)) + Number(calculatedQuote)) < 0 
+                            (Number(getBalanceForCurrency(selectedPair.quote_currency)) - Number(calculatedQuote)) < 0 
                               ? 'text-red-400' 
                               : 'text-green-400'
                           }`}>
-                            {(Number(getBalanceForCurrency(selectedPair.quote_currency)) + Number(calculatedQuote)).toLocaleString('en-US', { 
+                            {(Number(getBalanceForCurrency(selectedPair.quote_currency)) - Number(calculatedQuote)).toLocaleString('en-US', { 
                               minimumFractionDigits: 2,
                               maximumFractionDigits: 2 
                             })}

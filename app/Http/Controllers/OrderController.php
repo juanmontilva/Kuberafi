@@ -183,34 +183,24 @@ class OrderController extends Controller
             ->orderBy('name')
             ->get(['id', 'name', 'email', 'phone']);
         
-        // Obtener saldos de métodos de pago del operador
-        $operatorBalances = \App\Models\OperatorCashBalance::with('paymentMethod')
+        // OPTIMIZADO: Cargar todos los balances del operador de una vez
+        $operatorBalances = \App\Models\OperatorCashBalance::with('paymentMethod:id,name')
             ->where('operator_id', $user->id)
             ->get()
-            ->map(function ($balance) {
-                return [
-                    'payment_method_id' => $balance->payment_method_id,
-                    'payment_method_name' => $balance->paymentMethod->name,
-                    'currency' => $balance->currency,
-                    'balance' => $balance->balance,
-                ];
-            })
-            ->keyBy(function ($item) {
-                return $item['payment_method_id'] . '_' . $item['currency'];
+            ->keyBy(function ($balance) {
+                return $balance->payment_method_id . '_' . $balance->currency;
             });
         
-        // Obtener todos los métodos de pago disponibles agrupados por moneda
+        // OPTIMIZADO: Obtener métodos de pago y mapear con balances precargados
         $paymentMethods = \App\Models\PaymentMethod::where('exchange_house_id', $user->exchange_house_id)
             ->where('is_active', true)
             ->get()
             ->groupBy('currency')
-            ->map(function ($methods) use ($user) {
-                return $methods->map(function ($method) use ($user) {
-                    // Obtener saldo actual del operador para este método
-                    $balance = \App\Models\OperatorCashBalance::where('operator_id', $user->id)
-                        ->where('payment_method_id', $method->id)
-                        ->where('currency', $method->currency)
-                        ->first();
+            ->map(function ($methods) use ($operatorBalances) {
+                return $methods->map(function ($method) use ($operatorBalances) {
+                    // Buscar balance en la colección precargada (sin query)
+                    $balanceKey = $method->id . '_' . $method->currency;
+                    $balance = $operatorBalances->get($balanceKey);
                     
                     return [
                         'id' => $method->id,
@@ -323,31 +313,29 @@ class OrderController extends Controller
                 ])->withInput();
             }
         } else {
-            // Modo automático: seleccionar el método con mayor saldo
-            $paymentMethodIn = \App\Models\PaymentMethod::where('exchange_house_id', $user->exchange_house_id)
-                ->where('currency', $baseCurrency)
-                ->where('is_active', true)
-                ->get()
-                ->sortByDesc(function ($method) use ($user, $baseCurrency) {
-                    $balance = \App\Models\OperatorCashBalance::where('operator_id', $user->id)
-                        ->where('payment_method_id', $method->id)
-                        ->where('currency', $baseCurrency)
-                        ->first();
-                    return $balance ? $balance->balance : 0;
+            // OPTIMIZADO: Modo automático con JOIN para evitar N+1
+            $paymentMethodIn = \App\Models\PaymentMethod::select('payment_methods.*', 'operator_cash_balances.balance')
+                ->leftJoin('operator_cash_balances', function($join) use ($user, $baseCurrency) {
+                    $join->on('payment_methods.id', '=', 'operator_cash_balances.payment_method_id')
+                         ->where('operator_cash_balances.operator_id', '=', $user->id)
+                         ->where('operator_cash_balances.currency', '=', $baseCurrency);
                 })
+                ->where('payment_methods.exchange_house_id', $user->exchange_house_id)
+                ->where('payment_methods.currency', $baseCurrency)
+                ->where('payment_methods.is_active', true)
+                ->orderByDesc('operator_cash_balances.balance')
                 ->first();
             
-            $paymentMethodOut = \App\Models\PaymentMethod::where('exchange_house_id', $user->exchange_house_id)
-                ->where('currency', $quoteCurrency)
-                ->where('is_active', true)
-                ->get()
-                ->sortByDesc(function ($method) use ($user, $quoteCurrency) {
-                    $balance = \App\Models\OperatorCashBalance::where('operator_id', $user->id)
-                        ->where('payment_method_id', $method->id)
-                        ->where('currency', $quoteCurrency)
-                        ->first();
-                    return $balance ? $balance->balance : 0;
+            $paymentMethodOut = \App\Models\PaymentMethod::select('payment_methods.*', 'operator_cash_balances.balance')
+                ->leftJoin('operator_cash_balances', function($join) use ($user, $quoteCurrency) {
+                    $join->on('payment_methods.id', '=', 'operator_cash_balances.payment_method_id')
+                         ->where('operator_cash_balances.operator_id', '=', $user->id)
+                         ->where('operator_cash_balances.currency', '=', $quoteCurrency);
                 })
+                ->where('payment_methods.exchange_house_id', $user->exchange_house_id)
+                ->where('payment_methods.currency', $quoteCurrency)
+                ->where('payment_methods.is_active', true)
+                ->orderByDesc('operator_cash_balances.balance')
                 ->first();
         }
         
@@ -590,36 +578,68 @@ class OrderController extends Controller
 
         DB::beginTransaction();
         try {
-            // Revertir movimientos del fondo de caja si existen
+            // OPTIMIZADO: Cargar movimientos y balances de una vez
             $cashMovements = \App\Models\CashMovement::where('order_id', $order->id)->get();
             
-            foreach ($cashMovements as $movement) {
-                // Obtener el balance
-                $balance = \App\Models\OperatorCashBalance::where('operator_id', $movement->operator_id)
-                    ->where('payment_method_id', $movement->payment_method_id)
-                    ->where('currency', $movement->currency)
-                    ->first();
-                
-                if ($balance) {
-                    // Revertir el movimiento (invertir el signo)
-                    $revertAmount = -$movement->amount;
-                    
-                    // Crear movimiento de reversión
-                    \App\Models\CashMovement::create([
+            if ($cashMovements->isNotEmpty()) {
+                // Obtener todos los balances necesarios en una sola query
+                $balanceKeys = $cashMovements->map(function($movement) {
+                    return [
                         'operator_id' => $movement->operator_id,
                         'payment_method_id' => $movement->payment_method_id,
-                        'order_id' => $order->id,
-                        'type' => 'adjustment',
-                        'currency' => $movement->currency,
-                        'amount' => $revertAmount,
-                        'balance_before' => $balance->balance,
-                        'balance_after' => $balance->balance + $revertAmount,
-                        'description' => "Reversión por cancelación de orden #{$order->order_number}: {$validated['cancellation_reason']}",
-                    ]);
+                        'currency' => $movement->currency
+                    ];
+                })->unique();
+                
+                $balances = \App\Models\OperatorCashBalance::where(function($query) use ($balanceKeys) {
+                    foreach ($balanceKeys as $key) {
+                        $query->orWhere(function($q) use ($key) {
+                            $q->where('operator_id', $key['operator_id'])
+                              ->where('payment_method_id', $key['payment_method_id'])
+                              ->where('currency', $key['currency']);
+                        });
+                    }
+                })->get()->keyBy(function($balance) {
+                    return $balance->operator_id . '_' . $balance->payment_method_id . '_' . $balance->currency;
+                });
+                
+                // Procesar reversiones sin queries adicionales
+                $reversions = [];
+                foreach ($cashMovements as $movement) {
+                    $balanceKey = $movement->operator_id . '_' . $movement->payment_method_id . '_' . $movement->currency;
+                    $balance = $balances->get($balanceKey);
                     
-                    // Actualizar el balance
-                    $balance->balance += $revertAmount;
-                    $balance->save();
+                    if ($balance) {
+                        $revertAmount = -$movement->amount;
+                        
+                        // Preparar movimiento de reversión
+                        $reversions[] = [
+                            'operator_id' => $movement->operator_id,
+                            'payment_method_id' => $movement->payment_method_id,
+                            'order_id' => $order->id,
+                            'type' => 'adjustment',
+                            'currency' => $movement->currency,
+                            'amount' => $revertAmount,
+                            'balance_before' => $balance->balance,
+                            'balance_after' => $balance->balance + $revertAmount,
+                            'description' => "Reversión por cancelación de orden #{$order->order_number}: {$validated['cancellation_reason']}",
+                            'created_at' => now(),
+                            'updated_at' => now(),
+                        ];
+                        
+                        // Actualizar balance en memoria
+                        $balance->balance += $revertAmount;
+                    }
+                }
+                
+                // Insertar todas las reversiones de una vez
+                if (!empty($reversions)) {
+                    \App\Models\CashMovement::insert($reversions);
+                    
+                    // Actualizar todos los balances de una vez
+                    foreach ($balances as $balance) {
+                        $balance->save();
+                    }
                 }
             }
 
