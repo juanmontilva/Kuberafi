@@ -69,9 +69,40 @@ export default function ShowImproved({ order }: Props) {
   const [showCompleteModal, setShowCompleteModal] = useState(false);
   const [showCancelModal, setShowCancelModal] = useState(false);
   
+  // Calcular expected_quote_amount correcto según modelo de comisión
+  const calculateExpectedQuoteAmount = () => {
+    const baseAmount = parseFloat(order.base_amount);
+    const model = order.commission_model || 'percentage';
+    
+    switch (model) {
+      case 'percentage': {
+        // Neto después de comisión, convertido a quote
+        const commissionPercent = parseFloat(order.house_commission_percent || '0');
+        const netAmount = baseAmount * (1 - commissionPercent / 100);
+        const rate = parseFloat(order.applied_rate || order.market_rate);
+        return (netAmount * rate).toFixed(2);
+      }
+      case 'spread': {
+        // Todo el monto a tasa de venta
+        const sellRate = parseFloat(order.sell_rate || order.applied_rate);
+        return (baseAmount * sellRate).toFixed(2);
+      }
+      case 'mixed': {
+        // Monto completo menos comisión en quote
+        const sellRate = parseFloat(order.sell_rate || order.applied_rate);
+        const commissionPercent = parseFloat(order.house_commission_percent || '0');
+        const quoteAmount = baseAmount * sellRate;
+        const commissionInQuote = (baseAmount * commissionPercent / 100) * sellRate;
+        return (quoteAmount - commissionInQuote).toFixed(2);
+      }
+      default:
+        return order.quote_amount;
+    }
+  };
+  
   const { data, setData, post, processing, errors, reset } = useForm({
     actual_rate: order.applied_rate,
-    actual_quote_amount: order.quote_amount,
+    actual_quote_amount: calculateExpectedQuoteAmount(), // ✅ Calcular correctamente
     actual_margin_percent: order.expected_margin_percent,
     notes: order.notes || '',
   });

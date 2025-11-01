@@ -248,9 +248,16 @@ class DashboardController extends Controller
         $profitMonth = $statsMonth->profit;
         $platformFeeMonth = $statsMonth->platform_fee;
         
-        // Métricas de hoy
+        // Métricas de hoy (solo órdenes completadas para volumen real)
         $ordersToday = $exchangeHouse->orders()->whereDate('created_at', $today)->count();
-        $volumeToday = $exchangeHouse->orders()->whereDate('created_at', $today)->sum('base_amount');
+        $volumeToday = $exchangeHouse->orders()
+            ->whereDate('created_at', $today)
+            ->where('status', 'completed')
+            ->sum('base_amount');
+        $profitToday = $exchangeHouse->orders()
+            ->whereDate('created_at', $today)
+            ->where('status', 'completed')
+            ->sum('exchange_commission');
         
         // Top pares de divisas (OPTIMIZADO - JOIN en lugar de eager loading con groupBy)
         $topPairs = $exchangeHouse->orders()
@@ -431,7 +438,8 @@ class DashboardController extends Controller
                 // Hoy
                 'ordersToday' => $ordersToday,
                 'volumeToday' => number_format($volumeToday, 2),
-                'dailyLimitUsed' => number_format(($volumeToday / $exchangeHouse->daily_limit) * 100, 1),
+                'profitToday' => number_format($profitToday, 2),
+                'dailyLimitUsed' => $exchangeHouse->daily_limit > 0 ? number_format(($volumeToday / $exchangeHouse->daily_limit) * 100, 1) : '0.0',
                 
                 // Comparaciones (para % de cambio)
                 'volumeYesterday' => number_format($volumeYesterday, 2),
@@ -439,7 +447,7 @@ class DashboardController extends Controller
                 'commissionsLastMonth' => number_format($commissionsLastMonth, 2),
                 
                 // Promedios
-                'avgCommissionPercent' => $ordersMonth > 0 ? number_format($profitMonth / $ordersMonth, 2) : '0.00',
+                'avgMarginPercent' => $volumeMonth > 0 ? number_format(($profitMonth / $volumeMonth) * 100, 2) : '0.00',
                 'avgProfitPerOrder' => $ordersMonth > 0 ? number_format($profitMonth / $ordersMonth, 2) : '0.00',
                 
                 // Deuda a Kuberafi
