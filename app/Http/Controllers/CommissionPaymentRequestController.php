@@ -334,9 +334,12 @@ class CommissionPaymentRequestController extends Controller
             abort(403, 'No tienes permiso para ver esta solicitud.');
         }
 
-        // Obtener comisiones asociadas a esta solicitud
+        // Obtener comisiones directamente vinculadas a esta solicitud
         $commissions = $paymentRequest->commissions()
-            ->with(['order.currencyPair', 'order.customer'])
+            ->with(['order' => function($query) {
+                $query->select('id', 'order_number', 'base_amount', 'quote_amount', 'currency_pair_id', 'customer_id', 'created_at')
+                    ->with(['currencyPair:id,base_currency,quote_currency', 'customer:id,name,email']);
+            }])
             ->orderBy('created_at', 'desc')
             ->paginate(50);
 
@@ -360,9 +363,12 @@ class CommissionPaymentRequestController extends Controller
 
         $paymentRequest->load(['exchangeHouse', 'confirmedBy']);
 
-        // Obtener comisiones asociadas a esta solicitud
+        // Obtener comisiones directamente vinculadas a esta solicitud
         $commissions = $paymentRequest->commissions()
-            ->with(['order.currencyPair', 'order.customer'])
+            ->with(['order' => function($query) {
+                $query->select('id', 'order_number', 'base_amount', 'quote_amount', 'currency_pair_id', 'customer_id', 'created_at')
+                    ->with(['currencyPair:id,base_currency,quote_currency', 'customer:id,name,email']);
+            }])
             ->orderBy('created_at', 'desc')
             ->paginate(50);
 

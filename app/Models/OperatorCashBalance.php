@@ -58,8 +58,8 @@ class OperatorCashBalance extends Model
      */
     public function decrement($amount, $description = null, $orderId = null, $type = 'withdrawal')
     {
-        $balanceBefore = $this->balance;
-        $this->balance -= $amount;
+        $balanceBefore = $this->balance ?? 0;
+        $this->balance = ($this->balance ?? 0) - $amount;
         $this->save();
 
         // Registrar movimiento

@@ -49,7 +49,7 @@ class DiagnoseCashBalances extends Command
                 $operator ? $operator->email : 'N/A',
                 $method ? $method->name : '❌ Método eliminado',
                 $balance->currency,
-                number_format($balance->balance, 2),
+                number_format((float) $balance->balance, 2),
                 $balance->created_at->format('Y-m-d H:i'),
             ];
         }

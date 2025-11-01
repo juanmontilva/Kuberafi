@@ -25,24 +25,24 @@ class CommissionPaymentController extends Controller
             ->paginate(20);
 
         // Estadísticas detalladas
-        $totalPending = CommissionPayment::where('status', 'pending')->sum('total_amount');
-        $totalCommissionPending = CommissionPayment::where('status', 'pending')->sum('commission_amount');
+        $totalPending = CommissionPayment::where('status', 'pending')->sum('total_commissions');
+        $totalCommissionPending = CommissionPayment::where('status', 'pending')->sum('total_commissions');
         
-        $totalOverdue = CommissionPayment::where('status', 'overdue')->sum('total_amount');
-        $totalCommissionOverdue = CommissionPayment::where('status', 'overdue')->sum('commission_amount');
+        $totalOverdue = CommissionPayment::where('status', 'overdue')->sum('total_commissions');
+        $totalCommissionOverdue = CommissionPayment::where('status', 'overdue')->sum('total_commissions');
         
         $totalPaidThisMonth = CommissionPayment::where('status', 'paid')
             ->whereMonth('paid_at', now()->month)
-            ->sum('total_amount');
+            ->sum('total_commissions');
         $totalCommissionPaidThisMonth = CommissionPayment::where('status', 'paid')
             ->whereMonth('paid_at', now()->month)
-            ->sum('commission_amount');
+            ->sum('total_commissions');
 
         $overdueCount = CommissionPayment::where('status', 'overdue')->count();
         
         // Total de comisiones acumuladas (lo que le deben a la plataforma)
         $totalCommissionsOwed = CommissionPayment::whereIn('status', ['pending', 'overdue'])
-            ->sum('commission_amount');
+            ->sum('total_commissions');
 
         return Inertia::render('Admin/CommissionPayments', [
             'payments' => $payments,
@@ -185,17 +185,42 @@ class CommissionPaymentController extends Controller
             ->get();
 
         $generated = 0;
+        $updated = 0;
+        $skipped = 0;
         $totalAmount = 0;
         
         foreach ($schedules as $schedule) {
             $payment = $schedule->generatePayment();
             if ($payment) {
-                $generated++;
-                $totalAmount += $payment->total_amount;
+                if ($payment->wasRecentlyCreated) {
+                    $generated++;
+                } else {
+                    $updated++;
+                }
+                $totalAmount += $payment->total_commissions;
+            } else {
+                $skipped++;
             }
         }
 
-        return back()->with('success', "Se generaron {$generated} pagos por un total de $" . number_format($totalAmount, 2));
+        if ($generated === 0 && $updated === 0) {
+            if ($skipped > 0) {
+                return back()->with('info', "No se generaron ni actualizaron pagos. Las casas tienen solicitudes en proceso o sin monto suficiente.");
+            }
+            return back()->with('info', "No hay cronogramas activos configurados.");
+        }
+
+        $messages = [];
+        if ($generated > 0) {
+            $messages[] = "✅ {$generated} solicitud(es) generada(s)";
+        }
+        if ($updated > 0) {
+            $messages[] = "🔄 {$updated} solicitud(es) actualizada(s) con nuevas comisiones";
+        }
+        
+        $message = implode(" | ", $messages) . " | Total: $" . number_format($totalAmount, 2);
+        
+        return back()->with('success', $message);
     }
 
     public function dashboard(Request $request)
@@ -215,24 +240,25 @@ class CommissionPaymentController extends Controller
                 $firstPayment = $payments->first();
                 return [
                     'house' => $firstPayment->exchangeHouse, // Ya cargado por with()
-                    'total' => $payments->sum('total_amount'),
+                    'total' => $payments->sum('total_commissions'),
                     'count' => $payments->count(),
-                    'oldest' => $payments->min('due_date'),
+                    'oldest' => $payments->min('requested_at'),
                 ];
             });
 
-        // Pagos vencidos
+        // Pagos vencidos (más de 7 días sin procesar)
         $overduePayments = CommissionPayment::with('exchangeHouse')
-            ->where('status', 'overdue')
-            ->orderBy('due_date', 'asc')
+            ->where('status', 'pending')
+            ->where('requested_at', '<', now()->subDays(7))
+            ->orderBy('requested_at', 'asc')
             ->limit(10)
             ->get();
 
-        // Próximos pagos (próximos 7 días)
+        // Solicitudes recientes (últimos 7 días)
         $upcomingPayments = CommissionPayment::with('exchangeHouse')
             ->where('status', 'pending')
-            ->whereBetween('due_date', [now(), now()->addDays(7)])
-            ->orderBy('due_date', 'asc')
+            ->where('requested_at', '>=', now()->subDays(7))
+            ->orderBy('requested_at', 'desc')
             ->get();
 
         return Inertia::render('Admin/PaymentsDashboard', [

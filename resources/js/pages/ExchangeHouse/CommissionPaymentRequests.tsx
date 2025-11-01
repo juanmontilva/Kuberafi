@@ -290,40 +290,46 @@ function CommissionPaymentRequests({ requests, pendingCommissions, platformPayme
                       )}
                     </div>
 
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto">
                       <Button
                         size="sm"
                         variant="outline"
+                        className="w-full sm:w-auto"
                         asChild
                       >
                         <Link href={`/my-commission-requests/${request.id}`}>
-                          <Eye className="h-4 w-4 mr-2" />
-                          Ver Operaciones
+                          <Eye className="h-4 w-4 sm:mr-2" />
+                          <span className="hidden sm:inline">Ver Operaciones</span>
+                          <span className="sm:hidden">Ver Operaciones</span>
                         </Link>
                       </Button>
                       {request.status === 'pending' && (
                         <Button
                           size="sm"
+                          className="w-full sm:w-auto"
                           onClick={() => {
                             setSelectedRequest(request);
                             setIsPaymentDialogOpen(true);
                           }}
                         >
-                          <Upload className="h-4 w-4 mr-2" />
-                          Enviar Pago
+                          <Upload className="h-4 w-4 sm:mr-2" />
+                          <span className="hidden sm:inline">Enviar Pago</span>
+                          <span className="sm:hidden">Enviar Pago</span>
                         </Button>
                       )}
                       {request.status === 'rejected' && (
                         <Button
                           size="sm"
                           variant="outline"
+                          className="w-full sm:w-auto"
                           onClick={() => {
                             setSelectedRequest(request);
                             setIsPaymentDialogOpen(true);
                           }}
                         >
-                          <Upload className="h-4 w-4 mr-2" />
-                          Reenviar
+                          <Upload className="h-4 w-4 sm:mr-2" />
+                          <span className="hidden sm:inline">Reenviar</span>
+                          <span className="sm:hidden">Reenviar</span>
                         </Button>
                       )}
                     </div>

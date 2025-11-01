@@ -28,7 +28,8 @@ import {
     MessageSquare,
     Target,
     Wallet,
-    Coins
+    Coins,
+    Calendar
 } from 'lucide-react';
 import AppLogo from './app-logo';
 
@@ -77,6 +78,11 @@ export function KuberafiSidebar() {
             href: '/admin/commission-requests',
             icon: DollarSign,
             badge: 'important',
+        },
+        {
+            title: 'Cronogramas de Pago',
+            href: '/admin/payment-schedules',
+            icon: Calendar,
         },
         {
             title: 'Comisiones',

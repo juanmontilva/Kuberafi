@@ -62,40 +62,81 @@ class PaymentSchedule extends Model
         }
 
         // Obtener comisiones pendientes de la casa de cambio
-        $pendingCommissions = Commission::where('exchange_house_id', $this->exchange_house_id)
+        $commissionsQuery = Commission::where('exchange_house_id', $this->exchange_house_id)
             ->where('type', 'platform')
-            ->where('status', 'pending')
-            ->sum('amount');
+            ->where('status', 'pending');
+        
+        $pendingCommissions = $commissionsQuery->sum('amount');
+        $totalOrders = $commissionsQuery->distinct('order_id')->count('order_id');
+        $totalVolume = Order::whereIn('id', $commissionsQuery->pluck('order_id'))
+            ->sum('base_amount');
 
+        // NUNCA generar solicitudes de $0 o negativas
+        if ($pendingCommissions <= 0) {
+            return null;
+        }
+
+        // Verificar monto mínimo configurado
         if ($pendingCommissions < $this->minimum_amount) {
             return null;
         }
 
         $periodStart = $this->getLastPaymentEndDate();
         $periodEnd = Carbon::now();
+        
+        // CRÍTICO: Validar que el período sea válido (start debe ser antes de end)
+        if ($periodStart->isAfter($periodEnd)) {
+            // Si el inicio calculado es después del final, usar un período válido
+            $periodStart = $periodEnd->copy()->subMonth()->startOfMonth();
+        }
+        
         $dueDate = $this->getNextPaymentDate();
 
-        // Verificar si ya existe un pago pendiente para este período
+        // Verificar si ya existe un pago activo para esta casa
         $existingPayment = CommissionPayment::where('exchange_house_id', $this->exchange_house_id)
-            ->where('status', 'pending')
-            ->where('period_start', '>=', $periodStart)
-            ->where('period_end', '<=', $periodEnd)
+            ->whereIn('status', ['pending', 'approved', 'payment_info_sent'])
             ->first();
 
+        // Obtener IDs de las comisiones pendientes
+        $commissionIds = $commissionsQuery->pluck('id')->toArray();
+        
         if ($existingPayment) {
-            // Ya existe un pago para este período, no crear duplicado
+            // Si existe una solicitud pendiente, ACTUALIZARLA con el nuevo total
+            // (para incluir las nuevas comisiones que se generaron después)
+            if ($existingPayment->status->value === 'pending') {
+                $existingPayment->update([
+                    'total_commissions' => $pendingCommissions,
+                    'total_orders' => $totalOrders,
+                    'total_volume' => $totalVolume,
+                    'period_end' => $periodEnd,
+                    'updated_at' => now(),
+                ]);
+                
+                // Sincronizar comisiones asociadas
+                $existingPayment->commissions()->sync($commissionIds);
+                
+                return $existingPayment; // Retornar la actualizada
+            }
+            
+            // Si ya está aprobada o con info enviada, no modificar
             return null;
         }
 
-        return CommissionPayment::create([
+        $payment = CommissionPayment::create([
             'exchange_house_id' => $this->exchange_house_id,
-            'total_amount' => $pendingCommissions,
-            'commission_amount' => $pendingCommissions,
+            'total_commissions' => $pendingCommissions,
+            'total_orders' => $totalOrders,
+            'total_volume' => $totalVolume,
             'period_start' => $periodStart,
             'period_end' => $periodEnd,
-            'due_date' => $dueDate,
-            'frequency' => $this->frequency,
+            'requested_at' => now(),
+            'status' => 'pending',
         ]);
+        
+        // Vincular las comisiones a esta solicitud
+        $payment->commissions()->attach($commissionIds);
+        
+        return $payment;
     }
 
     private function getLastPaymentEndDate(): Carbon

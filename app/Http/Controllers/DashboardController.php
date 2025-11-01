@@ -627,8 +627,8 @@ class DashboardController extends Controller
             ->orderBy('created_at', 'desc')
             ->paginate(20)
             ->through(function ($commission) {
-                // Agregar información de promoción
-                $commission->has_promo = $commission->order->exchangeHouse->zero_commission_promo ?? false;
+                // Agregar información de promoción por comisión (monto 0 => promo 0%)
+                $commission->has_promo = ((float) $commission->amount) <= 0.0;
                 return $commission;
             });
 

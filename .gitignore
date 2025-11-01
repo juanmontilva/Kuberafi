@@ -26,3 +26,14 @@ yarn-error.log
 /.nova
 /.vscode
 /.zed
+
+# Database backups
+backup_mysql_*.sql
+*.sql
+
+# Environment files
+.env.mysql.backup
+.env.postgres
+
+# Docker volumes
+/docker/postgres/data

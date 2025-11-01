@@ -48,13 +48,17 @@ class Commission extends Model
         $platformRate = SystemSetting::getPlatformCommissionRate();
 
         // Crear comisión de la plataforma
+        $platformAmount = (float) $commissions['platform'];
+        $isPromoZero = $platformAmount <= 0;
         self::create([
             'order_id' => $order->id,
             'exchange_house_id' => $order->exchange_house_id,
             'type' => 'platform',
             'rate_percent' => $platformRate / 100,
-            'amount' => $commissions['platform'],
+            'amount' => $platformAmount,
             'base_amount' => $order->base_amount,
+            'status' => $isPromoZero ? 'paid' : 'pending',
+            'paid_at' => $isPromoZero ? now() : null,
         ]);
 
         // Crear comisión de la casa de cambio

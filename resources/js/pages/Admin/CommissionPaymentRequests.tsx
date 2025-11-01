@@ -167,7 +167,7 @@ function CommissionPaymentRequests({ requests, stats, currentStatus, currentExch
           <div>
             <div className="flex items-center gap-4 mb-2">
               <Button variant="ghost" size="sm" asChild>
-                <Link href="/admin/dashboard">
+                <Link href="/dashboard">
                   <ArrowLeft className="h-4 w-4" />
                 </Link>
               </Button>
@@ -435,12 +435,13 @@ function CommissionPaymentRequests({ requests, stats, currentStatus, currentExch
                       {request.payment_proof && (
                         <div className="text-sm">
                           {/* Solo mostrar botón si es una URL válida */}
-                          {(request.payment_proof.startsWith('http') || request.payment_proof.startsWith('data:image')) ? (
+                          {(request.payment_proof?.startsWith('http') || request.payment_proof?.startsWith('data:image')) ? (
                             <Button
                               size="sm"
                               variant="link"
                               className="h-auto p-0 text-blue-600"
                               onClick={() => {
+                                if (!request.payment_proof) return;
                                 // Si es base64, abrir en nueva ventana
                                 if (request.payment_proof.startsWith('data:image')) {
                                   const win = window.open();

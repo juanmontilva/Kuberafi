@@ -77,24 +77,48 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::put('admin/currency-pairs/{currencyPair}', [App\Http\Controllers\Admin\CurrencyPairController::class, 'update'])->name('admin.currency-pairs.update');
         Route::delete('admin/currency-pairs/{currencyPair}', [App\Http\Controllers\Admin\CurrencyPairController::class, 'destroy'])->name('admin.currency-pairs.destroy');
         Route::post('admin/currency-pairs/{currencyPair}/toggle', [App\Http\Controllers\Admin\CurrencyPairController::class, 'toggleActive'])->name('admin.currency-pairs.toggle');
+        
+        // Gestión de Solicitudes de Pago de Comisiones (Nuevo Sistema - Admin)
+        Route::prefix('admin/commission-payments')->name('admin.commission-payments.')->group(function () {
+            Route::get('/', [App\Modules\Commissions\Controllers\CommissionPaymentController::class, 'adminIndex'])->name('index');
+            Route::post('/{payment}/approve', [App\Modules\Commissions\Controllers\CommissionPaymentController::class, 'approve'])->name('approve');
+            Route::post('/{payment}/reject', [App\Modules\Commissions\Controllers\CommissionPaymentController::class, 'reject'])->name('reject');
+            Route::post('/{payment}/mark-as-paid', [App\Modules\Commissions\Controllers\CommissionPaymentController::class, 'markAsPaid'])->name('mark-as-paid');
+            Route::post('/batch-approve', [App\Modules\Commissions\Controllers\CommissionPaymentController::class, 'batchApprove'])->name('batch-approve');
+            Route::post('/batch-mark-as-paid', [App\Modules\Commissions\Controllers\CommissionPaymentController::class, 'batchMarkAsPaid'])->name('batch-mark-as-paid');
+        });
     });
 
     // Rutas para Casas de Cambio y Super Admin
     Route::middleware(['role:super_admin,exchange_house,operator'])->group(function () {
         // OPTIMIZADO: Definir store separadamente con rate limit
-        Route::post('orders', [App\Http\Controllers\OrderController::class, 'store'])
+        Route::post('orders', [App\Modules\Orders\Controllers\OrderController::class, 'store'])
             ->middleware('rate.limit.orders')
             ->name('orders.store');
-        Route::resource('orders', App\Http\Controllers\OrderController::class)->except(['store']);
-        Route::post('orders/{order}/complete', [App\Http\Controllers\OrderController::class, 'complete'])->name('orders.complete');
-        Route::post('orders/{order}/cancel', [App\Http\Controllers\OrderController::class, 'cancel'])->name('orders.cancel');
-        Route::get('orders-export', [App\Http\Controllers\OrderController::class, 'export'])->name('orders.export');
+        Route::resource('orders', App\Modules\Orders\Controllers\OrderController::class)->except(['store']);
+        Route::post('orders/{order}/complete', [App\Modules\Orders\Controllers\OrderController::class, 'complete'])->name('orders.complete');
+        Route::post('orders/{order}/cancel', [App\Modules\Orders\Controllers\OrderController::class, 'cancel'])->name('orders.cancel');
+        Route::get('orders-export', [App\Modules\Orders\Controllers\OrderController::class, 'export'])->name('orders.export');
     });
 
     // Rutas solo para Casas de Cambio y Operadores
     Route::middleware(['role:exchange_house,operator'])->group(function () {
         Route::get('my-commissions', [App\Http\Controllers\DashboardController::class, 'myCommissions'])->name('my.commissions');
         Route::get('my-performance', [App\Http\Controllers\PerformanceController::class, 'index'])->name('my.performance');
+        
+        // Módulo de Comisiones (Nuevo Sistema)
+        Route::prefix('commissions')->name('commissions.')->group(function () {
+            Route::get('/', [App\Modules\Commissions\Controllers\CommissionController::class, 'index'])->name('index');
+            Route::get('/history', [App\Modules\Commissions\Controllers\CommissionController::class, 'history'])->name('history');
+            Route::get('/reports', [App\Modules\Commissions\Controllers\CommissionController::class, 'reports'])->name('reports');
+            Route::get('/export', [App\Modules\Commissions\Controllers\CommissionController::class, 'export'])->name('export');
+            
+            // Solicitudes de Pago
+            Route::get('/request-payment', [App\Modules\Commissions\Controllers\CommissionPaymentController::class, 'create'])->name('request-payment');
+            Route::post('/request-payment', [App\Modules\Commissions\Controllers\CommissionPaymentController::class, 'store'])->name('request-payment.store');
+            Route::get('/payment/{payment}', [App\Modules\Commissions\Controllers\CommissionPaymentController::class, 'show'])->name('payment.show');
+            Route::post('/payment/{payment}/cancel', [App\Modules\Commissions\Controllers\CommissionPaymentController::class, 'cancel'])->name('payment.cancel');
+        });
         
         // Cierre de Operaciones
         Route::get('operation-closure', [App\Http\Controllers\OperationClosureController::class, 'index'])->name('operation-closure.index');
@@ -107,10 +131,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::post('my-commission-requests/{paymentRequest}/send-payment', [App\Http\Controllers\CommissionPaymentRequestController::class, 'sendPaymentInfo'])->name('my.commission-requests.send-payment');
         
         // Control de Caja (Fondo de Caja)
-        Route::get('cash-box', [App\Http\Controllers\CashBoxController::class, 'index'])->name('cash-box.index');
-        Route::post('cash-box/movement', [App\Http\Controllers\CashBoxController::class, 'registerMovement'])->name('cash-box.movement');
-        Route::get('cash-box/history', [App\Http\Controllers\CashBoxController::class, 'history'])->name('cash-box.history');
-        Route::get('cash-box/export', [App\Http\Controllers\CashBoxController::class, 'export'])->name('cash-box.export');
+        Route::get('cash-box', [App\Modules\Payments\Controllers\CashBoxController::class, 'index'])->name('cash-box.index');
+        Route::post('cash-box/movement', [App\Modules\Payments\Controllers\CashBoxController::class, 'registerMovement'])->name('cash-box.movement');
+        Route::get('cash-box/history', [App\Modules\Payments\Controllers\CashBoxController::class, 'history'])->name('cash-box.history');
+        Route::get('cash-box/export', [App\Modules\Payments\Controllers\CashBoxController::class, 'export'])->name('cash-box.export');
     });
     
     // Rutas solo para Casas de Cambio
@@ -137,29 +161,29 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::get('/currency-pairs/{currencyPair}/rate-history/comparison', [App\Http\Controllers\CurrencyPairRateHistoryController::class, 'comparison'])->name('currency-pairs.rate-history.comparison');
         
         // Payment Methods para casas de cambio
-        Route::get('/payment-methods', [App\Http\Controllers\ExchangeHouse\PaymentMethodController::class, 'index'])->name('payment-methods.index');
-        Route::post('/payment-methods', [App\Http\Controllers\ExchangeHouse\PaymentMethodController::class, 'store'])->name('payment-methods.store');
-        Route::put('/payment-methods/{paymentMethod}', [App\Http\Controllers\ExchangeHouse\PaymentMethodController::class, 'update'])->name('payment-methods.update');
-        Route::delete('/payment-methods/{paymentMethod}', [App\Http\Controllers\ExchangeHouse\PaymentMethodController::class, 'destroy'])->name('payment-methods.destroy');
-        Route::post('/payment-methods/{paymentMethod}/toggle', [App\Http\Controllers\ExchangeHouse\PaymentMethodController::class, 'toggle'])->name('payment-methods.toggle');
+        Route::get('/payment-methods', [App\Modules\Payments\Controllers\PaymentMethodController::class, 'index'])->name('payment-methods.index');
+        Route::post('/payment-methods', [App\Modules\Payments\Controllers\PaymentMethodController::class, 'store'])->name('payment-methods.store');
+        Route::put('/payment-methods/{paymentMethod}', [App\Modules\Payments\Controllers\PaymentMethodController::class, 'update'])->name('payment-methods.update');
+        Route::delete('/payment-methods/{paymentMethod}', [App\Modules\Payments\Controllers\PaymentMethodController::class, 'destroy'])->name('payment-methods.destroy');
+        Route::post('/payment-methods/{paymentMethod}/toggle', [App\Modules\Payments\Controllers\PaymentMethodController::class, 'toggle'])->name('payment-methods.toggle');
         
         // CRM Customers
-        Route::resource('customers', App\Http\Controllers\ExchangeHouse\CustomerController::class);
-        Route::post('/customers/{customer}/activities', [App\Http\Controllers\ExchangeHouse\CustomerController::class, 'addActivity'])->name('customers.activities.store');
+        Route::resource('customers', App\Modules\Customers\Controllers\CustomerController::class);
+        Route::post('/customers/{customer}/activities', [App\Modules\Customers\Controllers\CustomerController::class, 'addActivity'])->name('customers.activities.store');
         Route::post('/customers/{customer}/bank-accounts', [App\Http\Controllers\ExchangeHouse\CustomerBankAccountController::class, 'store'])->name('customers.bank-accounts.store');
         Route::put('/customers/{customer}/bank-accounts/{bankAccount}', [App\Http\Controllers\ExchangeHouse\CustomerBankAccountController::class, 'update'])->name('customers.bank-accounts.update');
         Route::delete('/customers/{customer}/bank-accounts/{bankAccount}', [App\Http\Controllers\ExchangeHouse\CustomerBankAccountController::class, 'destroy'])->name('customers.bank-accounts.destroy');
         
         // Analytics Endpoints
         Route::prefix('analytics')->name('analytics.')->group(function () {
-            Route::get('/currency-pair-trends', [App\Http\Controllers\ExchangeHouse\AnalyticsController::class, 'currencyPairTrends'])->name('currency-pair-trends');
-            Route::get('/activity-heatmap', [App\Http\Controllers\ExchangeHouse\AnalyticsController::class, 'activityHeatmap'])->name('activity-heatmap');
-            Route::get('/margin-analysis', [App\Http\Controllers\ExchangeHouse\AnalyticsController::class, 'marginAnalysis'])->name('margin-analysis');
-            Route::get('/liquidity-forecast', [App\Http\Controllers\ExchangeHouse\AnalyticsController::class, 'liquidityForecast'])->name('liquidity-forecast');
-            Route::get('/period-comparison', [App\Http\Controllers\ExchangeHouse\AnalyticsController::class, 'periodComparison'])->name('period-comparison');
-            Route::get('/payment-method-analysis', [App\Http\Controllers\ExchangeHouse\AnalyticsController::class, 'paymentMethodAnalysis'])->name('payment-method-analysis');
-            Route::get('/processing-speed', [App\Http\Controllers\ExchangeHouse\AnalyticsController::class, 'processingSpeed'])->name('processing-speed');
-            Route::get('/top-customers', [App\Http\Controllers\ExchangeHouse\AnalyticsController::class, 'topCustomersAnalysis'])->name('top-customers');
+            Route::get('/currency-pair-trends', [App\Modules\Analytics\Controllers\AnalyticsController::class, 'currencyPairTrends'])->name('currency-pair-trends');
+            Route::get('/activity-heatmap', [App\Modules\Analytics\Controllers\AnalyticsController::class, 'activityHeatmap'])->name('activity-heatmap');
+            Route::get('/margin-analysis', [App\Modules\Analytics\Controllers\AnalyticsController::class, 'marginAnalysis'])->name('margin-analysis');
+            Route::get('/liquidity-forecast', [App\Modules\Analytics\Controllers\AnalyticsController::class, 'liquidityForecast'])->name('liquidity-forecast');
+            Route::get('/period-comparison', [App\Modules\Analytics\Controllers\AnalyticsController::class, 'periodComparison'])->name('period-comparison');
+            Route::get('/payment-method-analysis', [App\Modules\Analytics\Controllers\AnalyticsController::class, 'paymentMethodAnalysis'])->name('payment-method-analysis');
+            Route::get('/processing-speed', [App\Modules\Analytics\Controllers\AnalyticsController::class, 'processingSpeed'])->name('processing-speed');
+            Route::get('/top-customers', [App\Modules\Analytics\Controllers\AnalyticsController::class, 'topCustomersAnalysis'])->name('top-customers');
         });
         
     });
