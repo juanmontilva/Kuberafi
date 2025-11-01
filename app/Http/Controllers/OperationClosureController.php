@@ -157,7 +157,7 @@ class OperationClosureController extends Controller
         $filename = 'cierre_operaciones_' . $dateFrom . '_' . $dateTo . '.xlsx';
         
         return \Maatwebsite\Excel\Facades\Excel::download(
-            new \App\Exports\OperationClosureExport($query, $dateFrom, $dateTo),
+            new \App\Exports\OperationClosureMultiSheetExport($query, $dateFrom, $dateTo),
             $filename
         );
     }

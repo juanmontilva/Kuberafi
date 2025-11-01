@@ -23,6 +23,10 @@ class Order extends Model
         'quote_amount',
         'market_rate',
         'applied_rate',
+        'commission_model',
+        'buy_rate',
+        'sell_rate',
+        'spread_profit',
         'expected_margin_percent',
         'actual_margin_percent',
         'house_commission_percent',
@@ -43,6 +47,9 @@ class Order extends Model
         'quote_amount' => 'decimal:2',
         'market_rate' => 'decimal:6',
         'applied_rate' => 'decimal:6',
+        'buy_rate' => 'decimal:6',
+        'sell_rate' => 'decimal:6',
+        'spread_profit' => 'decimal:2',
         'expected_margin_percent' => 'decimal:2',
         'actual_margin_percent' => 'decimal:2',
         'house_commission_percent' => 'decimal:2',
@@ -101,35 +108,75 @@ class Order extends Model
 
     public function calculateCommissions()
     {
-        // Validar que tenemos los datos necesarios
-        if (!$this->base_amount || !$this->house_commission_percent) {
-            throw new \Exception('Faltan datos para calcular comisiones');
+        // Validaciones básicas
+        if (!$this->base_amount) {
+            throw new \Exception('Falta base_amount para calcular comisiones');
         }
 
-        // Comisión total de la casa (ej: 5% = $50 de $1000)
-        $houseCommissionAmount = $this->base_amount * ($this->house_commission_percent / 100);
-        
-        // Verificar si la casa tiene promoción de 0 comisiones
+        // Cargar relación necesaria si no está cargada
+        $this->loadMissing('exchangeHouse');
+
+        $platformRate = SystemSetting::getPlatformCommissionRate(); // %
         $hasPromo = $this->exchangeHouse && $this->exchangeHouse->zero_commission_promo;
-        
-        if ($hasPromo) {
-            // Con promoción: la casa no paga nada a la plataforma
-            $platformCommission = 0;
-            $exchangeCommission = $houseCommissionAmount; // La casa se queda con todo
-        } else {
-            // Sin promoción: cálculo normal
-            $platformRate = SystemSetting::getPlatformCommissionRate();
-            
-            if (!$platformRate || $platformRate <= 0) {
-                throw new \Exception('Tasa de comisión de plataforma no configurada');
+
+        // Inicializar variables a utilizar en todos los modelos
+        $houseCommissionAmount = 0.0;           // En moneda base
+        $platformCommission = 0.0;              // En moneda base
+        $exchangeCommission = 0.0;              // En moneda base (ganancia neta de la casa)
+        $netAmount = $this->base_amount;        // En moneda base (lo que se usa para cambiar)
+
+        switch ($this->commission_model) {
+            case 'percentage':
+            default: {
+                // Requiere porcentaje
+                $percent = (float) ($this->house_commission_percent ?? 0);
+                $houseCommissionAmount = $this->base_amount * ($percent / 100);
+
+                // Plataforma cobra sobre el monto base (no sobre la comisión)
+                $platformCommission = $hasPromo ? 0 : ($this->base_amount * ($platformRate / 100));
+                $exchangeCommission = $houseCommissionAmount - $platformCommission;
+
+                // El cliente recibe monto base menos comisión
+                $netAmount = $this->base_amount - $houseCommissionAmount;
+                break;
             }
-            
-            $platformCommission = $this->base_amount * ($platformRate / 100);
-            $exchangeCommission = $houseCommissionAmount - $platformCommission;
+
+            case 'spread': {
+                // Ganancia por diferencia de tasas. spread_profit está en moneda cotizada.
+                $spreadProfitQuote = (float) ($this->spread_profit ?? 0);
+                $buyRate = (float) ($this->buy_rate ?? 0);
+                $spreadProfitBase = $buyRate > 0 ? ($spreadProfitQuote / $buyRate) : 0.0;
+
+                // En spread puro no hay comisión %
+                $houseCommissionAmount = 0.0;
+                $platformCommission = $hasPromo ? 0 : ($this->base_amount * ($platformRate / 100));
+                $exchangeCommission = $spreadProfitBase - $platformCommission;
+
+                // El cliente paga el monto completo (no se descuenta comisión de su monto base)
+                $netAmount = $this->base_amount;
+                break;
+            }
+
+            case 'mixed': {
+                // Spread + Porcentaje: spread sobre monto completo + comisión % adicional
+                $percent = (float) ($this->house_commission_percent ?? 0);
+                $houseCommissionAmount = $this->base_amount * ($percent / 100); // En base
+
+                // Spread sobre monto completo (no sobre neto)
+                $spreadProfitQuote = (float) ($this->spread_profit ?? 0);
+                $buyRate = (float) ($this->buy_rate ?? 0);
+                $spreadProfitBase = $buyRate > 0 ? ($spreadProfitQuote / $buyRate) : 0.0;
+
+                // Ganancia total = spread completo + comisión %
+                $totalProfitBase = $spreadProfitBase + $houseCommissionAmount;
+                $platformCommission = $hasPromo ? 0 : ($this->base_amount * ($platformRate / 100));
+                $exchangeCommission = $totalProfitBase - $platformCommission;
+                
+                // Cliente recibe base menos comisión para efectos de registro
+                $netAmount = $this->base_amount - $houseCommissionAmount;
+                break;
+            }
         }
-        
-        // Monto neto que recibe el cliente
-        $netAmount = $this->base_amount - $houseCommissionAmount;
 
         $this->update([
             'house_commission_amount' => $houseCommissionAmount,

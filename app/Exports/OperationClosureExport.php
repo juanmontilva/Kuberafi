@@ -70,13 +70,34 @@ class OperationClosureExport implements FromCollection, WithHeadings, WithMappin
             'Estado',
             'Operador',
             'Notas',
+            'Modelo',
+            'Tasa Compra',
+            'Tasa Venta',
+            'Spread Pts',
+            'Ganancia Spread (Quote)',
+            'Ganancia Spread (USD)',
+            'Margen Real %',
         ];
     }
 
     public function map($order): array
     {
         $this->rowNumber++;
-        
+        // Cálculos adicionales por modelo
+        $model = $order->commission_model ?? 'percentage';
+        $buyRate = (float) ($order->buy_rate ?? 0);
+        $sellRate = (float) ($order->sell_rate ?? 0);
+        $spreadPts = ($buyRate && $sellRate) ? ($sellRate - $buyRate) : 0;
+        $spreadQuote = (float) ($order->spread_profit ?? 0);
+        $spreadUsd = $buyRate > 0 ? ($spreadQuote / $buyRate) : 0;
+        $actualMargin = (float) ($order->actual_margin_percent ?? 0);
+
+        $modelLabel = [
+            'percentage' => 'Porcentaje',
+            'spread' => 'Spread',
+            'mixed' => 'Mixto',
+        ][$model] ?? $model;
+
         return [
             $order->order_number,
             $order->created_at->format('d/m/Y'), // Fecha separada
@@ -93,6 +114,13 @@ class OperationClosureExport implements FromCollection, WithHeadings, WithMappin
             $this->getStatusLabel($order->status),
             $order->user->name,
             $order->notes ?? '',
+            $modelLabel,
+            $buyRate,
+            $sellRate,
+            $spreadPts,
+            $spreadQuote,
+            $spreadUsd,
+            $actualMargin,
         ];
     }
 
@@ -143,6 +171,13 @@ class OperationClosureExport implements FromCollection, WithHeadings, WithMappin
             'M' => 12,  // Estado
             'N' => 20,  // Operador
             'O' => 30,  // Notas
+            'P' => 12,  // Modelo
+            'Q' => 12,  // Tasa Compra
+            'R' => 12,  // Tasa Venta
+            'S' => 12,  // Spread Pts
+            'T' => 20,  // Ganancia Spread (Quote)
+            'U' => 20,  // Ganancia Spread (USD)
+            'V' => 14,  // Margen Real %
         ];
     }
 
@@ -154,7 +189,7 @@ class OperationClosureExport implements FromCollection, WithHeadings, WithMappin
                 $lastRow = $this->totalRows + 1;
                 
                 // Aplicar formato básico primero
-                $sheet->getStyle('A1:O' . $lastRow)->applyFromArray([
+                $sheet->getStyle('A1:V' . $lastRow)->applyFromArray([
                     'borders' => [
                         'allBorders' => [
                             'borderStyle' => Border::BORDER_THIN,
@@ -176,6 +211,18 @@ class OperationClosureExport implements FromCollection, WithHeadings, WithMappin
                 $sheet->getStyle('J2:L' . $lastRow)->getNumberFormat()
                     ->setFormatCode('$#,##0.00');
 
+                // Formatos para nuevas columnas
+                $sheet->getStyle('Q2:R' . $lastRow)->getNumberFormat()
+                    ->setFormatCode('#,##0.0000');
+                $sheet->getStyle('S2:S' . $lastRow)->getNumberFormat()
+                    ->setFormatCode('#,##0.00');
+                $sheet->getStyle('T2:T' . $lastRow)->getNumberFormat()
+                    ->setFormatCode('#,##0.00');
+                $sheet->getStyle('U2:U' . $lastRow)->getNumberFormat()
+                    ->setFormatCode('$#,##0.00');
+                $sheet->getStyle('V2:V' . $lastRow)->getNumberFormat()
+                    ->setFormatCode('0.00"%"');
+
                 // Centrar columnas específicas
                 $sheet->getStyle('A2:A' . $lastRow)->getAlignment()
                     ->setHorizontal(Alignment::HORIZONTAL_CENTER);
@@ -186,23 +233,44 @@ class OperationClosureExport implements FromCollection, WithHeadings, WithMappin
                 $sheet->getStyle('M2:M' . $lastRow)->getAlignment()
                     ->setHorizontal(Alignment::HORIZONTAL_CENTER);
 
-                // Alinear a la derecha los números
-                $sheet->getStyle('F2:L' . $lastRow)->getAlignment()
+                // Alinear a la derecha los números (extender hasta V)
+                $sheet->getStyle('F2:V' . $lastRow)->getAlignment()
                     ->setHorizontal(Alignment::HORIZONTAL_RIGHT);
+                
+                // Agregar comentarios explicativos en encabezados
+                $sheet->getComment('P1')->getText()->createTextRun('Porcentaje: Solo comisión %\nSpread: Diferencia buy/sell\nMixto: Spread + Comisión %');
+                $sheet->getComment('Q1')->getText()->createTextRun('Tasa a la que la casa compra dólares (solo Spread y Mixto)');
+                $sheet->getComment('R1')->getText()->createTextRun('Tasa a la que el cliente paga (solo Spread y Mixto)');
+                $sheet->getComment('S1')->getText()->createTextRun('Diferencia entre Tasa Venta y Tasa Compra (solo Spread y Mixto)');
+                $sheet->getComment('L1')->getText()->createTextRun('Ganancia después de descontar comisión de plataforma (0% con promoción)');
 
-                // Aplicar colores alternados a las filas (zebra striping)
+                // Colorear filas según modelo de comisión
                 for ($row = 2; $row <= $lastRow; $row++) {
-                    if ($row % 2 == 0) {
-                        $sheet->getStyle('A' . $row . ':O' . $row)->applyFromArray([
-                            'fill' => [
-                                'fillType' => Fill::FILL_SOLID,
-                                'startColor' => ['rgb' => 'F3F4F6'] // Gris claro
-                            ],
-                        ]);
+                    $model = $sheet->getCell('P' . $row)->getValue();
+                    $baseColor = 'FFFFFF';
+                    
+                    switch ($model) {
+                        case 'Porcentaje':
+                            $baseColor = 'DBEAFE'; // Azul claro
+                            break;
+                        case 'Spread':
+                            $baseColor = 'D1FAE5'; // Verde claro
+                            break;
+                        case 'Mixto':
+                            $baseColor = 'E9D5FF'; // Púrpura claro
+                            break;
                     }
+                    
+                    // Aplicar color de fondo según modelo
+                    $sheet->getStyle('A' . $row . ':V' . $row)->applyFromArray([
+                        'fill' => [
+                            'fillType' => Fill::FILL_SOLID,
+                            'startColor' => ['rgb' => $baseColor]
+                        ],
+                    ]);
                 }
 
-                // Colorear estados
+                // Colorear estados (mantener encima del color de modelo para que destaque)
                 for ($row = 2; $row <= $lastRow; $row++) {
                     $status = $sheet->getCell('M' . $row)->getValue();
                     $color = 'FFFFFF';
@@ -255,7 +323,7 @@ class OperationClosureExport implements FromCollection, WithHeadings, WithMappin
 
     public function title(): string
     {
-        return 'Cierre ' . date('d-m-Y', strtotime($this->dateFrom));
+        return '📈 Operaciones ' . date('d/m/Y', strtotime($this->dateFrom));
     }
 
     private function getStatusLabel($status)
@@ -304,9 +372,12 @@ class OperationClosureExport implements FromCollection, WithHeadings, WithMappin
                     $sheet->setCellValue('J' . $subtotalRow, '=SUM(J' . $pairStartRow . ':J' . $endRow . ')');
                     $sheet->setCellValue('K' . $subtotalRow, '=SUM(K' . $pairStartRow . ':K' . $endRow . ')');
                     $sheet->setCellValue('L' . $subtotalRow, '=SUM(L' . $pairStartRow . ':L' . $endRow . ')');
+                    // Sumar también las columnas de spread
+                    $sheet->setCellValue('T' . $subtotalRow, '=SUM(T' . $pairStartRow . ':T' . $endRow . ')');
+                    $sheet->setCellValue('U' . $subtotalRow, '=SUM(U' . $pairStartRow . ':U' . $endRow . ')');
                     
-                    // Estilo del subtotal
-                    $sheet->getStyle('A' . $subtotalRow . ':O' . $subtotalRow)->applyFromArray([
+                    // Estilo del subtotal (extender hasta V)
+                    $sheet->getStyle('A' . $subtotalRow . ':V' . $subtotalRow)->applyFromArray([
                         'fill' => [
                             'fillType' => Fill::FILL_SOLID,
                             'startColor' => ['rgb' => '3B82F6'] // Azul medio
@@ -329,6 +400,10 @@ class OperationClosureExport implements FromCollection, WithHeadings, WithMappin
                         ->setFormatCode('#,##0.00');
                     $sheet->getStyle('J' . $subtotalRow . ':L' . $subtotalRow)->getNumberFormat()
                         ->setFormatCode('$#,##0.00');
+                    $sheet->getStyle('T' . $subtotalRow)->getNumberFormat()
+                        ->setFormatCode('#,##0.00');
+                    $sheet->getStyle('U' . $subtotalRow)->getNumberFormat()
+                        ->setFormatCode('$#,##0.00');
                     
                     // Insertar fila en blanco de separación
                     $sheet->insertNewRowBefore($subtotalRow + 1, 1);
@@ -344,9 +419,9 @@ class OperationClosureExport implements FromCollection, WithHeadings, WithMappin
                 $insertedRows++;
                 
                 // Agregar encabezado del grupo
-                $sheet->mergeCells('A' . $headerRow . ':O' . $headerRow);
+                $sheet->mergeCells('A' . $headerRow . ':V' . $headerRow);
                 $sheet->setCellValue('A' . $headerRow, '═══ ' . $pair . ' ═══');
-                $sheet->getStyle('A' . $headerRow . ':O' . $headerRow)->applyFromArray([
+                $sheet->getStyle('A' . $headerRow . ':V' . $headerRow)->applyFromArray([
                     'fill' => [
                         'fillType' => Fill::FILL_SOLID,
                         'startColor' => ['rgb' => 'E0E7FF'] // Azul muy claro
@@ -385,9 +460,12 @@ class OperationClosureExport implements FromCollection, WithHeadings, WithMappin
             $sheet->setCellValue('J' . $subtotalRow, '=SUM(J' . $pairStartRow . ':J' . $endRow . ')');
             $sheet->setCellValue('K' . $subtotalRow, '=SUM(K' . $pairStartRow . ':K' . $endRow . ')');
             $sheet->setCellValue('L' . $subtotalRow, '=SUM(L' . $pairStartRow . ':L' . $endRow . ')');
+            // Sumar columnas de spread
+            $sheet->setCellValue('T' . $subtotalRow, '=SUM(T' . $pairStartRow . ':T' . $endRow . ')');
+            $sheet->setCellValue('U' . $subtotalRow, '=SUM(U' . $pairStartRow . ':U' . $endRow . ')');
             
-            // Estilo del subtotal
-            $sheet->getStyle('A' . $subtotalRow . ':O' . $subtotalRow)->applyFromArray([
+            // Estilo del subtotal (hasta V)
+            $sheet->getStyle('A' . $subtotalRow . ':V' . $subtotalRow)->applyFromArray([
                 'fill' => [
                     'fillType' => Fill::FILL_SOLID,
                     'startColor' => ['rgb' => '3B82F6']
@@ -405,10 +483,14 @@ class OperationClosureExport implements FromCollection, WithHeadings, WithMappin
                 ],
             ]);
             
-            // Formato de números
+            // Formato de números para último subtotal
             $sheet->getStyle('F' . $subtotalRow . ':G' . $subtotalRow)->getNumberFormat()
                 ->setFormatCode('#,##0.00');
             $sheet->getStyle('J' . $subtotalRow . ':L' . $subtotalRow)->getNumberFormat()
+                ->setFormatCode('$#,##0.00');
+            $sheet->getStyle('T' . $subtotalRow)->getNumberFormat()
+                ->setFormatCode('#,##0.00');
+            $sheet->getStyle('U' . $subtotalRow)->getNumberFormat()
                 ->setFormatCode('$#,##0.00');
             
             $insertedRows++;
@@ -495,14 +577,25 @@ class OperationClosureExport implements FromCollection, WithHeadings, WithMappin
                     }
                 }
                 
+                // Leer valores de subtotal, priorizando spread USD si existe
+                $commissionSum = $sheet->getCell('J' . $row)->getCalculatedValue();
+                $platformSum = $sheet->getCell('K' . $row)->getCalculatedValue();
+                $profitSum = $sheet->getCell('L' . $row)->getCalculatedValue();
+                $spreadUsdSum = $sheet->getCell('U' . $row)->getCalculatedValue();
+                
+                // Si profit es 0 pero hay spread USD, usar spread USD
+                if ($profitSum == 0 && $spreadUsdSum > 0) {
+                    $profitSum = $spreadUsdSum;
+                }
+                
                 $summaryData[] = [
                     'pair' => $pair,
                     'count' => $count,
                     'base' => $sheet->getCell('F' . $row)->getCalculatedValue(),
                     'quote' => $sheet->getCell('G' . $row)->getCalculatedValue(),
-                    'commission' => $sheet->getCell('J' . $row)->getCalculatedValue(),
-                    'platform' => $sheet->getCell('K' . $row)->getCalculatedValue(),
-                    'profit' => $sheet->getCell('L' . $row)->getCalculatedValue(),
+                    'commission' => $commissionSum,
+                    'platform' => $platformSum,
+                    'profit' => $profitSum,
                 ];
             }
         }

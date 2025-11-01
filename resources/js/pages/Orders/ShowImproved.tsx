@@ -36,6 +36,10 @@ interface Order {
   platform_commission: string;
   exchange_commission: string;
   net_amount: string;
+  commission_model?: 'percentage' | 'spread' | 'mixed';
+  buy_rate?: string;
+  sell_rate?: string;
+  spread_profit?: string;
   created_at: string;
   completed_at: string | null;
   notes: string | null;
@@ -138,33 +142,50 @@ export default function ShowImproved({ order }: Props) {
   const marginDifference = parseFloat(order.actual_margin_percent) - parseFloat(order.expected_margin_percent);
   const isProfitable = marginDifference >= 0;
 
+  // Obtener el modelo de comisión
+  const commissionModel = order.commission_model || 'percentage';
+
+  // Helper para obtener el label del modelo
+  const getCommissionModelLabel = () => {
+    switch (commissionModel) {
+      case 'percentage':
+        return { label: 'Porcentaje Fijo', icon: '📊', color: 'text-blue-500' };
+      case 'spread':
+        return { label: 'Spread', icon: '💱', color: 'text-green-500' };
+      case 'mixed':
+        return { label: 'Mixto', icon: '🔀', color: 'text-purple-500' };
+      default:
+        return { label: 'Porcentaje Fijo', icon: '📊', color: 'text-blue-500' };
+    }
+  };
+
   return (
     <>
       <Head title={`Orden ${order.order_number}`} />
       
       <div className="space-y-6 pb-8">
-        {/* Header */}
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <Button variant="outline" size="sm" asChild>
+        {/* Header - Responsive */}
+        <div className="space-y-4">
+          <div className="flex items-center gap-3">
+            <Button variant="outline" size="sm" asChild className="shrink-0">
               <Link href="/orders">
-                <ArrowLeft className="h-4 w-4 mr-2" />
-                Volver
+                <ArrowLeft className="h-4 w-4 md:mr-2" />
+                <span className="hidden md:inline">Volver</span>
               </Link>
             </Button>
-            <div>
-              <h1 className="text-3xl font-bold text-white">{order.order_number}</h1>
-              <p className="text-gray-400 text-sm mt-1">
+            <div className="min-w-0 flex-1">
+              <h1 className="text-xl md:text-3xl font-bold text-white truncate">{order.order_number}</h1>
+              <p className="text-gray-400 text-xs md:text-sm mt-1">
                 {order.currency_pair.symbol} • {new Date(order.created_at).toLocaleDateString('es-ES')}
               </p>
             </div>
           </div>
           
           {order.status === 'pending' && (
-            <div className="flex gap-2">
+            <div className="flex flex-col sm:flex-row gap-2">
               <Dialog open={showCompleteModal} onOpenChange={setShowCompleteModal}>
                 <DialogTrigger asChild>
-                  <Button className="bg-emerald-500 hover:bg-emerald-600">
+                  <Button className="bg-emerald-500 hover:bg-emerald-600 w-full sm:w-auto">
                     <CheckCircle className="h-4 w-4 mr-2" />
                     Completar Orden
                   </Button>
@@ -329,7 +350,7 @@ export default function ShowImproved({ order }: Props) {
 
             <Dialog open={showCancelModal} onOpenChange={setShowCancelModal}>
               <DialogTrigger asChild>
-                <Button variant="destructive">
+                <Button variant="destructive" className="w-full sm:w-auto">
                   <AlertCircle className="h-4 w-4 mr-2" />
                   Cancelar Orden
                 </Button>
@@ -453,6 +474,14 @@ export default function ShowImproved({ order }: Props) {
                 <DollarSign className="h-5 w-5 text-blue-400" />
                 Detalles de la Transacción
               </CardTitle>
+              <CardDescription className="flex items-center gap-2 mt-2">
+                <span className={getCommissionModelLabel().color}>
+                  {getCommissionModelLabel().icon}
+                </span>
+                <span className="text-gray-400">
+                  Modelo: {getCommissionModelLabel().label}
+                </span>
+              </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="flex justify-between items-center p-3 bg-slate-800/30 rounded-lg">
@@ -474,14 +503,73 @@ export default function ShowImproved({ order }: Props) {
               </div>
 
               <div className="pt-3 border-t border-slate-700">
-                <div className="flex justify-between mb-2">
-                  <span className="text-gray-400 text-sm">Tasa de Cambio</span>
-                  <span className="text-white font-mono">{parseFloat(order.applied_rate).toFixed(6)}</span>
-                </div>
-                <div className="flex justify-between mb-2">
-                  <span className="text-gray-400 text-sm">Monto Neto</span>
-                  <span className="text-emerald-400">${parseFloat(order.net_amount).toLocaleString()}</span>
-                </div>
+                {/* Información según el modelo */}
+                {commissionModel === 'percentage' && (
+                  <>
+                    <div className="flex justify-between mb-2">
+                      <span className="text-gray-400 text-sm">Tasa de Cambio</span>
+                      <span className="text-white font-mono">{parseFloat(order.applied_rate).toFixed(6)}</span>
+                    </div>
+                    <div className="flex justify-between mb-2">
+                      <span className="text-gray-400 text-sm">Monto Neto (después de comisión)</span>
+                      <span className="text-emerald-400">${parseFloat(order.net_amount).toLocaleString()}</span>
+                    </div>
+                  </>
+                )}
+
+                {commissionModel === 'spread' && (
+                  <>
+                    <div className="flex justify-between mb-2">
+                      <span className="text-gray-400 text-sm">Tasa de Compra (Tu Costo)</span>
+                      <span className="text-orange-400 font-mono">
+                        {order.buy_rate ? parseFloat(order.buy_rate).toFixed(6) : '-'}
+                      </span>
+                    </div>
+                    <div className="flex justify-between mb-2">
+                      <span className="text-gray-400 text-sm">Tasa de Venta (Al Cliente)</span>
+                      <span className="text-green-400 font-mono">
+                        {order.sell_rate ? parseFloat(order.sell_rate).toFixed(6) : parseFloat(order.applied_rate).toFixed(6)}
+                      </span>
+                    </div>
+                    <div className="flex justify-between mb-2">
+                      <span className="text-gray-400 text-sm">Spread</span>
+                      <span className="text-blue-400 font-mono">
+                        {order.buy_rate && order.sell_rate 
+                          ? (parseFloat(order.sell_rate) - parseFloat(order.buy_rate)).toFixed(6)
+                          : '-'}
+                      </span>
+                    </div>
+                  </>
+                )}
+
+                {commissionModel === 'mixed' && (
+                  <>
+                    <div className="flex justify-between mb-2">
+                      <span className="text-gray-400 text-sm">Tasa de Compra</span>
+                      <span className="text-orange-400 font-mono">
+                        {order.buy_rate ? parseFloat(order.buy_rate).toFixed(6) : '-'}
+                      </span>
+                    </div>
+                    <div className="flex justify-between mb-2">
+                      <span className="text-gray-400 text-sm">Tasa de Venta</span>
+                      <span className="text-green-400 font-mono">
+                        {order.sell_rate ? parseFloat(order.sell_rate).toFixed(6) : '-'}
+                      </span>
+                    </div>
+                    <div className="flex justify-between mb-2">
+                      <span className="text-gray-400 text-sm">Spread</span>
+                      <span className="text-blue-400 font-mono">
+                        {order.buy_rate && order.sell_rate 
+                          ? (parseFloat(order.sell_rate) - parseFloat(order.buy_rate)).toFixed(6)
+                          : '-'}
+                      </span>
+                    </div>
+                    <div className="flex justify-between mb-2">
+                      <span className="text-gray-400 text-sm">Comisión Adicional</span>
+                      <span className="text-purple-400">{parseFloat(order.house_commission_percent).toFixed(2)}%</span>
+                    </div>
+                  </>
+                )}
               </div>
             </CardContent>
           </Card>
@@ -495,12 +583,65 @@ export default function ShowImproved({ order }: Props) {
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="flex justify-between items-center p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-lg">
-                <span className="text-gray-300">Comisión Casa de Cambio</span>
-                <span className="text-emerald-400 font-bold">
-                  ${parseFloat(order.house_commission_amount).toLocaleString()}
-                </span>
-              </div>
+              {/* Ganancia según el modelo */}
+              {commissionModel === 'percentage' && (
+                <div className="flex justify-between items-center p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-lg">
+                  <span className="text-gray-300">📊 Comisión ({parseFloat(order.house_commission_percent).toFixed(2)}%)</span>
+                  <span className="text-emerald-400 font-bold">
+                    ${parseFloat(order.house_commission_amount).toLocaleString()}
+                  </span>
+                </div>
+              )}
+
+              {commissionModel === 'spread' && (
+                <div className="space-y-2">
+                  <div className="flex justify-between items-center p-3 bg-green-500/10 border border-green-500/30 rounded-lg">
+                    <span className="text-gray-300">💱 Ganancia por Spread</span>
+                    <span className="text-green-400 font-bold">
+                      {order.spread_profit 
+                        ? `${parseFloat(order.spread_profit).toLocaleString()} ${order.currency_pair.quote_currency}`
+                        : '-'}
+                    </span>
+                  </div>
+                  {order.spread_profit && order.buy_rate && (
+                    <div className="flex justify-between items-center px-3 text-sm">
+                      <span className="text-gray-400">Equivalente en {order.currency_pair.base_currency}</span>
+                      <span className="text-gray-300">
+                        ${(parseFloat(order.spread_profit) / parseFloat(order.buy_rate)).toFixed(2)}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {commissionModel === 'mixed' && (
+                <div className="space-y-3">
+                  <div className="space-y-2">
+                    <div className="flex justify-between items-center p-3 bg-green-500/10 border border-green-500/30 rounded-lg">
+                      <span className="text-gray-300">💱 Ganancia por Spread</span>
+                      <span className="text-green-400 font-bold">
+                        {order.spread_profit 
+                          ? `${parseFloat(order.spread_profit).toLocaleString()} ${order.currency_pair.quote_currency}`
+                          : '-'}
+                      </span>
+                    </div>
+                    {order.spread_profit && order.buy_rate && (
+                      <div className="flex justify-between items-center px-3 text-sm">
+                        <span className="text-gray-400">≈ En {order.currency_pair.base_currency}</span>
+                        <span className="text-gray-300">
+                          ${(parseFloat(order.spread_profit) / parseFloat(order.buy_rate)).toFixed(2)}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex justify-between items-center p-3 bg-purple-500/10 border border-purple-500/30 rounded-lg">
+                    <span className="text-gray-300">📊 Comisión Adicional ({parseFloat(order.house_commission_percent).toFixed(2)}%)</span>
+                    <span className="text-purple-400 font-bold">
+                      ${parseFloat(order.house_commission_amount).toLocaleString()}
+                    </span>
+                  </div>
+                </div>
+              )}
               
               <div className="flex justify-between items-center">
                 <span className="text-gray-400 text-sm">Comisión Plataforma</span>
@@ -515,10 +656,6 @@ export default function ShowImproved({ order }: Props) {
               </div>
 
               <div className="pt-3 border-t border-slate-700">
-                <div className="flex justify-between mb-2">
-                  <span className="text-gray-400 text-sm">% Comisión Casa</span>
-                  <span className="text-white">{parseFloat(order.house_commission_percent).toFixed(2)}%</span>
-                </div>
                 <div className="flex justify-between">
                   <span className="text-gray-400 text-sm">Margen Real</span>
                   <span className={`font-bold ${isProfitable ? 'text-emerald-400' : 'text-red-400'}`}>

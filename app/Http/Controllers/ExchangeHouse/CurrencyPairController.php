@@ -45,10 +45,35 @@ class CurrencyPairController extends Controller
     public function attach(Request $request, CurrencyPair $currencyPair)
     {
         $validated = $request->validate([
-            'margin_percent' => 'required|numeric|min:0|max:100',
+            'margin_percent' => 'nullable|numeric|min:0|max:100',
             'min_amount' => 'nullable|numeric|min:0',
             'max_amount' => 'nullable|numeric|min:0',
+            'commission_model' => 'required|in:percentage,spread,mixed',
+            'commission_percent' => 'nullable|numeric|min:0|max:100',
+            'buy_rate' => 'nullable|numeric|min:0',
         ]);
+
+        // Validaciones según el modelo
+        if ($validated['commission_model'] === 'percentage') {
+            $request->validate([
+                'commission_percent' => 'required|numeric|min:0|max:100',
+            ]);
+        }
+
+        if ($validated['commission_model'] === 'spread') {
+            $request->validate([
+                'buy_rate' => 'required|numeric|min:0',
+                'margin_percent' => 'required|numeric|min:0|max:100',
+            ]);
+        }
+
+        if ($validated['commission_model'] === 'mixed') {
+            $request->validate([
+                'buy_rate' => 'required|numeric|min:0',
+                'margin_percent' => 'required|numeric|min:0|max:100',
+                'commission_percent' => 'required|numeric|min:0|max:100',
+            ]);
+        }
 
         $exchangeHouse = request()->user()->exchangeHouse;
         $user = request()->user();
@@ -80,12 +105,32 @@ class CurrencyPairController extends Controller
             ]);
         }
 
-        $exchangeHouse->currencyPairs()->attach($currencyPair->id, [
+        // La tasa de venta es la tasa base del par
+        $sellRate = $currencyPair->current_rate;
+
+        // Preparar datos según el modelo de comisión
+        $pivotData = [
             'margin_percent' => $validated['margin_percent'],
             'min_amount' => $minAmount,
             'max_amount' => $maxAmount,
             'is_active' => true,
-        ]);
+            'commission_model' => $validated['commission_model'],
+            'sell_rate' => $sellRate,
+        ];
+
+        // Agregar campos específicos según el modelo
+        if ($validated['commission_model'] === 'percentage') {
+            $pivotData['commission_percent'] = $validated['commission_percent'];
+            $pivotData['buy_rate'] = null;
+        } elseif ($validated['commission_model'] === 'spread') {
+            $pivotData['commission_percent'] = null;
+            $pivotData['buy_rate'] = $validated['buy_rate'];
+        } else { // mixed
+            $pivotData['commission_percent'] = $validated['commission_percent'];
+            $pivotData['buy_rate'] = $validated['buy_rate'];
+        }
+
+        $exchangeHouse->currencyPairs()->attach($currencyPair->id, $pivotData);
 
         // Guardar en el historial la tasa inicial
         $currencyPair->saveRateChange(
@@ -104,10 +149,35 @@ class CurrencyPairController extends Controller
     {
         $validated = $request->validate([
             'current_rate' => 'required|numeric|min:0',
-            'margin_percent' => 'required|numeric|min:0|max:100',
+            'margin_percent' => 'nullable|numeric|min:0|max:100',
             'min_amount' => 'nullable|numeric|min:0',
             'max_amount' => 'nullable|numeric|min:0',
+            'commission_model' => 'required|in:percentage,spread,mixed',
+            'commission_percent' => 'nullable|numeric|min:0|max:100',
+            'buy_rate' => 'nullable|numeric|min:0',
         ]);
+
+        // Validaciones según el modelo
+        if ($validated['commission_model'] === 'percentage') {
+            $request->validate([
+                'commission_percent' => 'required|numeric|min:0|max:100',
+            ]);
+        }
+
+        if ($validated['commission_model'] === 'spread') {
+            $request->validate([
+                'buy_rate' => 'required|numeric|min:0',
+                'margin_percent' => 'required|numeric|min:0|max:100',
+            ]);
+        }
+
+        if ($validated['commission_model'] === 'mixed') {
+            $request->validate([
+                'buy_rate' => 'required|numeric|min:0',
+                'margin_percent' => 'required|numeric|min:0|max:100',
+                'commission_percent' => 'required|numeric|min:0|max:100',
+            ]);
+        }
 
         $exchangeHouse = request()->user()->exchangeHouse;
         $user = request()->user();
@@ -173,12 +243,32 @@ class CurrencyPairController extends Controller
             'current_rate' => $validated['current_rate'],
         ]);
 
-        // Actualizar configuración específica de la casa de cambio
-        $exchangeHouse->currencyPairs()->updateExistingPivot($currencyPair->id, [
+        // Calcular sell_rate (es la tasa base del par)
+        $sellRate = $validated['current_rate'];
+
+        // Preparar datos según el modelo de comisión
+        $pivotData = [
             'margin_percent' => $validated['margin_percent'],
             'min_amount' => $validated['min_amount'],
             'max_amount' => $validated['max_amount'],
-        ]);
+            'commission_model' => $validated['commission_model'],
+            'sell_rate' => $sellRate,
+        ];
+
+        // Agregar campos específicos según el modelo
+        if ($validated['commission_model'] === 'percentage') {
+            $pivotData['commission_percent'] = $validated['commission_percent'];
+            $pivotData['buy_rate'] = null;
+        } elseif ($validated['commission_model'] === 'spread') {
+            $pivotData['commission_percent'] = null;
+            $pivotData['buy_rate'] = $validated['buy_rate'];
+        } else { // mixed
+            $pivotData['commission_percent'] = $validated['commission_percent'];
+            $pivotData['buy_rate'] = $validated['buy_rate'];
+        }
+
+        // Actualizar configuración específica de la casa de cambio
+        $exchangeHouse->currencyPairs()->updateExistingPivot($currencyPair->id, $pivotData);
 
         return redirect()->back()->with('success', "Configuración actualizada para {$currencyPair->symbol}");
     }

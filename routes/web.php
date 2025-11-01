@@ -126,6 +126,11 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::delete('/currency-pairs/{currencyPair}/detach', [App\Http\Controllers\ExchangeHouse\CurrencyPairController::class, 'detach'])->name('currency-pairs.detach');
         Route::post('/currency-pairs/{currencyPair}/toggle', [App\Http\Controllers\ExchangeHouse\CurrencyPairController::class, 'toggleActive'])->name('currency-pairs.toggle');
         
+        // Configuración de Modelos de Comisión
+        Route::get('/currency-pairs-config', [App\Http\Controllers\ExchangeHouse\CurrencyPairConfigController::class, 'index'])->name('currency-pairs-config.index');
+        Route::put('/currency-pairs-config/{currencyPair}', [App\Http\Controllers\ExchangeHouse\CurrencyPairConfigController::class, 'update'])->name('currency-pairs-config.update');
+        Route::post('/currency-pairs-config/{currencyPair}/toggle', [App\Http\Controllers\ExchangeHouse\CurrencyPairConfigController::class, 'toggle'])->name('currency-pairs-config.toggle');
+        
         // Historial de tasas
         Route::get('/currency-pairs/{currencyPair}/rate-history', [App\Http\Controllers\CurrencyPairRateHistoryController::class, 'index'])->name('currency-pairs.rate-history');
         Route::get('/currency-pairs/{currencyPair}/rate-history/chart', [App\Http\Controllers\CurrencyPairRateHistoryController::class, 'chartData'])->name('currency-pairs.rate-history.chart');

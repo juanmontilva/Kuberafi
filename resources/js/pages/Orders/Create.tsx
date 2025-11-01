@@ -24,6 +24,15 @@ interface CurrencyPair {
   calculation_type: 'multiply' | 'divide';
   min_amount: string;
   max_amount?: string;
+  pivot?: {
+    commission_model: 'percentage' | 'spread' | 'mixed';
+    commission_percent?: number;
+    buy_rate?: number;
+    sell_rate?: number;
+    margin_percent?: number;
+    min_amount?: string;
+    max_amount?: string;
+  };
 }
 
 interface Customer {
@@ -76,6 +85,8 @@ function CreateOrder({ currencyPairs, platformCommissionRate, customers, operato
     currency_pair_id: '',
     base_amount: '',
     house_commission_percent: '5.0',
+    buy_rate: undefined as string | undefined,
+    sell_rate: undefined as string | undefined,
     customer_id: undefined as string | undefined,
     notes: '',
     payment_method_selection_mode: 'auto' as 'auto' | 'manual',
@@ -115,29 +126,163 @@ function CreateOrder({ currencyPairs, platformCommissionRate, customers, operato
         );
       });
 
-  // Calcular el monto que recibirá el cliente
+  // Calcular el monto según el modelo de comisión
   useEffect(() => {
-    if (selectedPair && data.base_amount && data.house_commission_percent) {
-      const baseAmount = parseFloat(data.base_amount);
-      const commissionPercent = parseFloat(data.house_commission_percent);
-      const currentRate = parseFloat(selectedPair.current_rate);
-      
-      if (!isNaN(baseAmount) && !isNaN(commissionPercent) && !isNaN(currentRate)) {
-        // Monto neto que recibe el cliente = Monto - Comisión
-        const commissionAmount = baseAmount * (commissionPercent / 100);
-        const netAmount = baseAmount - commissionAmount;
-        
-        // Calcular según el tipo de operación del par
-        const quoteAmount = selectedPair.calculation_type === 'divide'
-          ? netAmount / currentRate
-          : netAmount * currentRate;
-          
-        setCalculatedQuote(quoteAmount);
-      }
-    } else {
+    if (!selectedPair || !data.base_amount) {
       setCalculatedQuote(0);
+      return;
     }
-  }, [selectedPair, data.base_amount, data.house_commission_percent]);
+
+    const baseAmount = parseFloat(data.base_amount);
+    if (isNaN(baseAmount)) {
+      setCalculatedQuote(0);
+      return;
+    }
+
+    const commissionModel = selectedPair.pivot?.commission_model || 'percentage';
+
+    switch (commissionModel) {
+      case 'percentage': {
+        // Modelo tradicional: Comisión %
+        const commissionPercent = parseFloat(data.house_commission_percent || selectedPair.pivot?.commission_percent?.toString() || '5');
+        const currentRate = parseFloat(selectedPair.current_rate);
+        
+        if (!isNaN(commissionPercent) && !isNaN(currentRate)) {
+          const commissionAmount = baseAmount * (commissionPercent / 100);
+          const netAmount = baseAmount - commissionAmount;
+          
+          const quoteAmount = selectedPair.calculation_type === 'divide'
+            ? netAmount / currentRate
+            : netAmount * currentRate;
+            
+          setCalculatedQuote(quoteAmount);
+        }
+        break;
+      }
+
+      case 'spread': {
+        // Modelo spread: Solo usar tasa de venta
+        const sellRate = parseFloat(data.sell_rate || selectedPair.pivot?.sell_rate?.toString() || '0');
+        
+        if (sellRate > 0) {
+          const quoteAmount = baseAmount * sellRate;
+          setCalculatedQuote(quoteAmount);
+        }
+        break;
+      }
+
+      case 'mixed': {
+        // Modelo mixto: Spread sobre monto completo + comisión % descontada del quote
+        const sellRate = parseFloat(data.sell_rate || selectedPair.pivot?.sell_rate?.toString() || '0');
+        const commissionPercent = parseFloat(data.house_commission_percent || selectedPair.pivot?.commission_percent?.toString() || '0');
+        
+        if (sellRate > 0) {
+          // Cambiar todo el monto
+          const quoteAmount = baseAmount * sellRate;
+          
+          // Descontar comisión del quote
+          const commissionAmount = baseAmount * (commissionPercent / 100);
+          const commissionInQuote = commissionAmount * sellRate;
+          const finalQuote = quoteAmount - commissionInQuote;
+          
+          setCalculatedQuote(finalQuote);
+        }
+        break;
+      }
+    }
+  }, [selectedPair, data.base_amount, data.house_commission_percent, data.buy_rate, data.sell_rate]);
+
+  // Calcular ganancia según modelo
+  const calculateProfit = () => {
+    if (!selectedPair || !data.base_amount) return { spread: 0, commission: 0, total: 0 };
+
+    const baseAmount = parseFloat(data.base_amount);
+    const commissionModel = selectedPair.pivot?.commission_model || 'percentage';
+
+    switch (commissionModel) {
+      case 'percentage': {
+        const commissionPercent = parseFloat(data.house_commission_percent || '5');
+        const commissionAmount = baseAmount * (commissionPercent / 100);
+        return { spread: 0, commission: commissionAmount, total: commissionAmount };
+      }
+
+      case 'spread': {
+        const buyRate = parseFloat(data.buy_rate || selectedPair.pivot?.buy_rate?.toString() || '0');
+        const sellRate = parseFloat(data.sell_rate || selectedPair.pivot?.sell_rate?.toString() || '0');
+        const spreadProfit = baseAmount * (sellRate - buyRate);
+        return { spread: spreadProfit, commission: 0, total: spreadProfit };
+      }
+
+      case 'mixed': {
+        const buyRate = parseFloat(data.buy_rate || selectedPair.pivot?.buy_rate?.toString() || '0');
+        const sellRate = parseFloat(data.sell_rate || selectedPair.pivot?.sell_rate?.toString() || '0');
+        const commissionPercent = parseFloat(data.house_commission_percent || '0');
+        
+        // Spread se aplica sobre monto completo (100 USD)
+        const spreadProfit = baseAmount * (sellRate - buyRate);
+        
+        // Comisión % adicional
+        const commissionAmount = baseAmount * (commissionPercent / 100);
+        const commissionInQuote = commissionAmount * sellRate;
+        
+        return { spread: spreadProfit, commission: commissionInQuote, total: spreadProfit + commissionInQuote };
+      }
+
+      default:
+        return { spread: 0, commission: 0, total: 0 };
+    }
+  };
+
+  // Calcular el monto a cambiar según el modelo
+  const calculateAmountToExchange = () => {
+    if (!selectedPair || !data.base_amount) return 0;
+
+    const baseAmount = parseFloat(data.base_amount);
+    const commissionModel = selectedPair.pivot?.commission_model || 'percentage';
+
+    switch (commissionModel) {
+      case 'percentage': {
+        // En porcentaje, se resta la comisión del monto
+        const commissionPercent = parseFloat(data.house_commission_percent || '5');
+        const commissionAmount = baseAmount * (commissionPercent / 100);
+        return baseAmount - commissionAmount;
+      }
+
+      case 'spread':
+      case 'mixed': {
+        // En spread y mixto, el cliente paga el monto completo
+        // La ganancia viene de la diferencia de tasas
+        return baseAmount;
+      }
+
+      default:
+        return baseAmount;
+    }
+  };
+
+  // Obtener la tasa a mostrar según el modelo
+  const getDisplayRate = () => {
+    if (!selectedPair) return '0.0000';
+
+    const commissionModel = selectedPair.pivot?.commission_model || 'percentage';
+
+    switch (commissionModel) {
+      case 'percentage': {
+        // En porcentaje, mostrar la tasa base
+        return parseFloat(selectedPair.current_rate).toFixed(4);
+      }
+
+      case 'spread':
+      case 'mixed': {
+        // En spread y mixto, mostrar la tasa de venta (lo que cobra al cliente)
+        const sellRate = parseFloat(data.sell_rate || selectedPair.pivot?.sell_rate?.toString() || selectedPair.current_rate);
+        return sellRate.toFixed(4);
+      }
+
+      default:
+        return parseFloat(selectedPair.current_rate).toFixed(4);
+    }
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -148,6 +293,24 @@ function CreateOrder({ currencyPairs, platformCommissionRate, customers, operato
     const pair = currencyPairs.find(p => p.id.toString() === pairId);
     setSelectedPair(pair || null);
     setData('currency_pair_id', pairId);
+    
+    // Inicializar valores según el modelo de comisión
+    if (pair?.pivot) {
+      if (pair.pivot.commission_model === 'spread' || pair.pivot.commission_model === 'mixed') {
+        setData(prev => ({
+          ...prev,
+          buy_rate: pair.pivot?.buy_rate?.toString(),
+          sell_rate: pair.pivot?.sell_rate?.toString(),
+        }));
+      }
+      
+      if (pair.pivot.commission_model === 'percentage' || pair.pivot.commission_model === 'mixed') {
+        setData(prev => ({
+          ...prev,
+          house_commission_percent: pair.pivot?.commission_percent?.toString() || '5.0',
+        }));
+      }
+    }
   };
 
   return (
@@ -376,22 +539,157 @@ function CreateOrder({ currencyPairs, platformCommissionRate, customers, operato
                   )}
                 </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="house_commission_percent">Comisión (%)</Label>
-                  <Input
-                    id="house_commission_percent"
-                    type="number"
-                    step="0.1"
-                    min="0"
-                    max="100"
-                    value={data.house_commission_percent}
-                    onChange={(e) => setData('house_commission_percent', e.target.value)}
-                    placeholder="Ej: 5.0"
-                  />
-                  {errors.house_commission_percent && (
-                    <p className="text-sm text-red-600">{errors.house_commission_percent}</p>
-                  )}
-                </div>
+                {/* Campos de Comisión Dinámicos según Modelo */}
+                {selectedPair && (
+                  <div className="space-y-4">
+                    {/* Modelo Porcentaje */}
+                    {(!selectedPair.pivot?.commission_model || selectedPair.pivot.commission_model === 'percentage') && (
+                      <div className="space-y-2">
+                        <Label htmlFor="house_commission_percent">
+                          📊 Comisión (%)
+                        </Label>
+                        <Input
+                          id="house_commission_percent"
+                          type="number"
+                          step="0.1"
+                          min="0"
+                          max="100"
+                          value={data.house_commission_percent}
+                          onChange={(e) => setData('house_commission_percent', e.target.value)}
+                          placeholder="Ej: 5.0"
+                        />
+                        {errors.house_commission_percent && (
+                          <p className="text-sm text-red-600">{errors.house_commission_percent}</p>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Modelo Spread */}
+                    {selectedPair.pivot?.commission_model === 'spread' && (
+                      <div className="rounded-lg border border-green-500/30 bg-green-900/10 p-4 space-y-3">
+                        <div className="flex items-center gap-2 mb-2">
+                          <span className="text-green-400 font-semibold">💱 Modelo Spread</span>
+                        </div>
+                        <div className="grid grid-cols-2 gap-3">
+                          <div className="space-y-2">
+                            <Label htmlFor="buy_rate" className="text-green-300">
+                              Tasa de Compra
+                            </Label>
+                            <Input
+                              id="buy_rate"
+                              type="number"
+                              step="0.000001"
+                              min="0"
+                              value={data.buy_rate || ''}
+                              onChange={(e) => setData('buy_rate', e.target.value)}
+                              placeholder="290.00"
+                              className="bg-gray-900 border-green-500/30"
+                            />
+                            <p className="text-xs text-gray-400">Tu costo</p>
+                          </div>
+                          <div className="space-y-2">
+                            <Label htmlFor="sell_rate" className="text-green-300">
+                              Tasa de Venta
+                            </Label>
+                            <Input
+                              id="sell_rate"
+                              type="number"
+                              step="0.000001"
+                              min="0"
+                              value={data.sell_rate || ''}
+                              onChange={(e) => setData('sell_rate', e.target.value)}
+                              placeholder="295.00"
+                              className="bg-gray-900 border-green-500/30"
+                            />
+                            <p className="text-xs text-gray-400">Tu precio</p>
+                          </div>
+                        </div>
+                        {data.buy_rate && data.sell_rate && (
+                          <div className="mt-2 p-2 bg-green-900/20 rounded text-sm">
+                            <div className="flex justify-between text-green-300">
+                              <span>Spread:</span>
+                              <span className="font-bold">
+                                {(parseFloat(data.sell_rate) - parseFloat(data.buy_rate)).toFixed(2)} 
+                                ({(((parseFloat(data.sell_rate) - parseFloat(data.buy_rate)) / parseFloat(data.buy_rate)) * 100).toFixed(2)}%)
+                              </span>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Modelo Mixto */}
+                    {selectedPair.pivot?.commission_model === 'mixed' && (
+                      <div className="rounded-lg border border-purple-500/30 bg-purple-900/10 p-4 space-y-3">
+                        <div className="flex items-center gap-2 mb-2">
+                          <span className="text-purple-400 font-semibold">🔀 Modelo Mixto (Spread + Comisión)</span>
+                        </div>
+                        <div className="grid grid-cols-2 gap-3">
+                          <div className="space-y-2">
+                            <Label htmlFor="buy_rate_mixed" className="text-purple-300">
+                              Tasa de Compra
+                            </Label>
+                            <Input
+                              id="buy_rate_mixed"
+                              type="number"
+                              step="0.000001"
+                              min="0"
+                              value={data.buy_rate || ''}
+                              onChange={(e) => setData('buy_rate', e.target.value)}
+                              placeholder="290.00"
+                              className="bg-gray-900 border-purple-500/30"
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <Label htmlFor="sell_rate_mixed" className="text-purple-300">
+                              Tasa de Venta
+                            </Label>
+                            <Input
+                              id="sell_rate_mixed"
+                              type="number"
+                              step="0.000001"
+                              min="0"
+                              value={data.sell_rate || ''}
+                              onChange={(e) => setData('sell_rate', e.target.value)}
+                              placeholder="295.00"
+                              className="bg-gray-900 border-purple-500/30"
+                            />
+                          </div>
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="commission_percent_mixed" className="text-purple-300">
+                            Comisión Adicional (%)
+                          </Label>
+                          <Input
+                            id="commission_percent_mixed"
+                            type="number"
+                            step="0.1"
+                            min="0"
+                            max="100"
+                            value={data.house_commission_percent}
+                            onChange={(e) => setData('house_commission_percent', e.target.value)}
+                            placeholder="2.0"
+                            className="bg-gray-900 border-purple-500/30"
+                          />
+                        </div>
+                        {data.buy_rate && data.sell_rate && (
+                          <div className="mt-2 p-2 bg-purple-900/20 rounded text-sm space-y-1">
+                            <div className="flex justify-between text-purple-300">
+                              <span>Spread:</span>
+                              <span className="font-bold">
+                                {(parseFloat(data.sell_rate) - parseFloat(data.buy_rate)).toFixed(2)}
+                              </span>
+                            </div>
+                            <div className="flex justify-between text-purple-300">
+                              <span>Comisión:</span>
+                              <span className="font-bold">{data.house_commission_percent}%</span>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 {/* Selección de Métodos de Pago - Estilo OKX Dark Premium */}
                 {selectedPair && (
@@ -685,41 +983,81 @@ function CreateOrder({ currencyPairs, platformCommissionRate, customers, operato
                       <span className="font-semibold text-white">${parseFloat(data.base_amount).toLocaleString()}</span>
                     </div>
                     
-                    {/* Commission Breakdown */}
+                    {/* Profit Breakdown según Modelo */}
                     <div className="rounded-xl bg-gradient-to-br from-green-500/10 to-green-600/5 border border-green-500/30 p-4 space-y-2">
-                      <div className="flex justify-between items-center">
-                        <span className="text-green-400 font-semibold">Comisión Total ({data.house_commission_percent}%):</span>
-                        <span className="text-green-400 font-bold">+${(parseFloat(data.base_amount) * parseFloat(data.house_commission_percent) / 100).toFixed(2)}</span>
-                      </div>
-                      
-                      {platformCommissionRate === 0 ? (
-                        <div className="flex justify-between items-center text-xs pl-4 p-2 rounded-lg bg-purple-500/10 border border-purple-500/30">
-                          <span className="text-purple-300">↳ KuberaFi (0% - 🎉 Promoción):</span>
-                          <span className="text-purple-300 font-semibold">$0.00</span>
-                        </div>
-                      ) : (
-                        <div className="flex justify-between items-center text-xs pl-4">
-                          <span className="text-red-400">↳ KuberaFi ({platformCommissionRate}%):</span>
-                          <span className="text-red-400">-${(parseFloat(data.base_amount) * platformCommissionRate / 100).toFixed(2)}</span>
-                        </div>
-                      )}
-                      
-                      <div className={`flex justify-between items-center text-xs pl-4 ${platformCommissionRate === 0 ? 'text-purple-300 font-bold' : 'text-green-300'}`}>
-                        <span>↳ Tu ganancia neta:</span>
-                        <span className="font-bold">${((parseFloat(data.base_amount) * parseFloat(data.house_commission_percent) / 100) - (parseFloat(data.base_amount) * platformCommissionRate / 100)).toFixed(2)}</span>
-                      </div>
+                      {(() => {
+                        const profit = calculateProfit();
+                        const commissionModel = selectedPair.pivot?.commission_model || 'percentage';
+                        const platformFee = parseFloat(data.base_amount) * platformCommissionRate / 100;
+                        const netProfit = profit.total - platformFee;
+
+                        return (
+                          <>
+                            {/* Spread (si aplica) */}
+                            {profit.spread > 0 && (
+                              <div className="flex justify-between items-center">
+                                <span className="text-green-400 font-semibold">💱 Ganancia por Spread:</span>
+                                <span className="text-green-400 font-bold">
+                                  +{profit.spread.toFixed(2)} {selectedPair.quote_currency}
+                                </span>
+                              </div>
+                            )}
+
+                            {/* Comisión (si aplica) */}
+                            {profit.commission > 0 && (
+                              <div className="flex justify-between items-center">
+                                <span className="text-green-400 font-semibold">
+                                  📊 Comisión ({data.house_commission_percent}%):
+                                </span>
+                                <span className="text-green-400 font-bold">
+                                  +{profit.commission.toFixed(2)} {commissionModel === 'percentage' ? selectedPair.base_currency : selectedPair.quote_currency}
+                                </span>
+                              </div>
+                            )}
+
+                            {/* Ganancia Total */}
+                            <div className="flex justify-between items-center pt-2 border-t border-green-500/30">
+                              <span className="text-green-300 font-semibold">Ganancia Total:</span>
+                              <span className="text-green-300 font-bold">
+                                +{profit.total.toFixed(2)} {selectedPair.quote_currency}
+                              </span>
+                            </div>
+
+                            {/* Comisión Plataforma */}
+                            {platformCommissionRate === 0 ? (
+                              <div className="flex justify-between items-center text-xs pl-4 p-2 rounded-lg bg-purple-500/10 border border-purple-500/30">
+                                <span className="text-purple-300">↳ KuberaFi (0% - 🎉 Promoción):</span>
+                                <span className="text-purple-300 font-semibold">$0.00</span>
+                              </div>
+                            ) : (
+                              <div className="flex justify-between items-center text-xs pl-4">
+                                <span className="text-red-400">↳ KuberaFi ({platformCommissionRate}%):</span>
+                                <span className="text-red-400">-${platformFee.toFixed(2)}</span>
+                              </div>
+                            )}
+
+                            {/* Ganancia Neta */}
+                            <div className={`flex justify-between items-center text-xs pl-4 ${platformCommissionRate === 0 ? 'text-purple-300 font-bold' : 'text-green-300'}`}>
+                              <span>↳ Tu ganancia neta:</span>
+                              <span className="font-bold">
+                                {netProfit.toFixed(2)} {selectedPair.quote_currency}
+                              </span>
+                            </div>
+                          </>
+                        );
+                      })()}
                     </div>
                     
                     <div className="flex justify-between items-center text-sm pt-2 border-t border-gray-800">
                       <span className="text-gray-400">Monto a cambiar:</span>
                       <span className="font-bold text-white">
-                        ${(parseFloat(data.base_amount) - (parseFloat(data.base_amount) * parseFloat(data.house_commission_percent) / 100)).toFixed(2)}
+                        ${calculateAmountToExchange().toFixed(2)}
                       </span>
                     </div>
                     
                     <div className="flex justify-between items-center text-sm">
                       <span className="text-gray-400">Tasa:</span>
-                      <span className="font-mono text-white">{parseFloat(selectedPair.current_rate).toFixed(4)}</span>
+                      <span className="font-mono text-white">{getDisplayRate()}</span>
                     </div>
                   </div>
 

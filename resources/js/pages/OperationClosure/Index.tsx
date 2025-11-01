@@ -36,6 +36,14 @@ interface Order {
   house_commission_amount: string;
   platform_commission: string;
   exchange_commission: string;
+  applied_rate?: string;
+  market_rate?: string;
+  commission_model?: 'percentage' | 'spread' | 'mixed';
+  buy_rate?: string | null;
+  sell_rate?: string | null;
+  spread_profit?: string | null;
+  house_commission_percent?: string | null;
+  actual_margin_percent?: string | null;
   currency_pair: {
     symbol: string;
   };
@@ -131,6 +139,65 @@ function OperationClosure({ orders, stats, customersWithDebt, filters }: Props) 
       case 'failed': return 'Fallida';
       default: return status;
     }
+  };
+
+  // Helpers de visualización por modelo de comisión
+  const getCommissionModelBadge = (order: Order) => {
+    const model = order.commission_model || 'percentage';
+    switch (model) {
+      case 'spread':
+        return (
+          <span className="text-xs px-2 py-0.5 rounded bg-green-900/30 text-green-400 border border-green-800">
+            Spread
+          </span>
+        );
+      case 'mixed':
+        return (
+          <span className="text-xs px-2 py-0.5 rounded bg-purple-900/30 text-purple-300 border border-purple-800">
+            Mixto
+          </span>
+        );
+      default:
+        return (
+          <span className="text-xs px-2 py-0.5 rounded bg-blue-900/30 text-blue-300 border border-blue-800">
+            % Fijo
+          </span>
+        );
+    }
+  };
+
+  const formatOrderDetails = (order: Order) => {
+    const model = order.commission_model || 'percentage';
+    const toNum = (v: any) => (v === undefined || v === null ? 0 : parseFloat(String(v)) || 0);
+
+    if (model === 'spread') {
+      const buy = toNum(order.buy_rate);
+      const sell = toNum(order.sell_rate);
+      const spreadPts = buy && sell ? (sell - buy) : 0;
+      const spreadQuote = toNum(order.spread_profit);
+      const spreadUsd = buy > 0 ? spreadQuote / buy : 0;
+      const margin = toNum(order.actual_margin_percent);
+      return `Compra ${buy.toFixed(2)} · Venta ${sell.toFixed(2)} · Spread ${spreadPts.toFixed(2)} · Ganancia ${spreadQuote.toLocaleString()} (≈$${spreadUsd.toFixed(2)}) · Margen ${margin.toFixed(2)}%`;
+    }
+
+    if (model === 'mixed') {
+      const buy = toNum(order.buy_rate);
+      const sell = toNum(order.sell_rate);
+      const spreadPts = buy && sell ? (sell - buy) : 0;
+      const spreadQuote = toNum(order.spread_profit);
+      const spreadUsd = buy > 0 ? spreadQuote / buy : 0;
+      const pct = toNum(order.house_commission_percent);
+      const commission$ = toNum(order.house_commission_amount);
+      const margin = toNum(order.actual_margin_percent);
+      return `Compra ${buy.toFixed(2)} · Venta ${sell.toFixed(2)} · Spread ${spreadPts.toFixed(2)} · Ganancia Spread ${spreadQuote.toLocaleString()} (≈$${spreadUsd.toFixed(2)}) · Comisión ${pct.toFixed(2)}% ($${commission$.toFixed(2)}) · Margen ${margin.toFixed(2)}%`;
+    }
+
+    // percentage
+    const pct = toNum(order.house_commission_percent);
+    const commission$ = toNum(order.house_commission_amount);
+    const rate = toNum(order.applied_rate || order.market_rate);
+    const margin = toNum(order.actual_margin_percent);
+    return `Comisión ${pct.toFixed(2)}% ($${commission$.toFixed(2)}) · Tasa ${rate.toFixed(4)} · Margen ${margin.toFixed(2)}%`;
   };
 
   return (
@@ -243,7 +310,7 @@ function OperationClosure({ orders, stats, customersWithDebt, filters }: Props) 
 
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Volumen Total</CardTitle>
+              <CardTitle className="text-sm font-medium">Volumen Total (USD)</CardTitle>
               <DollarSign className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
@@ -251,14 +318,14 @@ function OperationClosure({ orders, stats, customersWithDebt, filters }: Props) 
                 ${stats.total_volume.toLocaleString('en-US', { minimumFractionDigits: 2 })}
               </div>
               <p className="text-xs text-muted-foreground mt-1">
-                Completado: ${stats.completed_volume.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                <span className="text-green-500">✓</span> Completado: ${stats.completed_volume.toLocaleString('en-US', { minimumFractionDigits: 2 })}
               </p>
             </CardContent>
           </Card>
 
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Ganancia Neta</CardTitle>
+              <CardTitle className="text-sm font-medium">Ganancia Neta (USD)</CardTitle>
               <TrendingUp className="h-4 w-4 text-green-500" />
             </CardHeader>
             <CardContent>
@@ -266,7 +333,7 @@ function OperationClosure({ orders, stats, customersWithDebt, filters }: Props) 
                 ${stats.total_exchange_commission.toLocaleString('en-US', { minimumFractionDigits: 2 })}
               </div>
               <p className="text-xs text-muted-foreground mt-1">
-                Comisión bruta: ${stats.total_house_commission.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                Spread + Comisión % − Plataforma (0%)
               </p>
             </CardContent>
           </Card>
@@ -370,9 +437,13 @@ function OperationClosure({ orders, stats, customersWithDebt, filters }: Props) 
                         <Badge className={getStatusColor(order.status)}>
                           {getStatusText(order.status)}
                         </Badge>
+                        {getCommissionModelBadge(order)}
                       </div>
                       <p className="text-sm text-muted-foreground mt-1">
                         {order.currency_pair.symbol} • {order.customer?.name || 'Sin cliente'} • {order.user.name}
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {formatOrderDetails(order)}
                       </p>
                       <p className="text-xs text-muted-foreground">
                         {new Date(order.created_at).toLocaleString('es-ES')}

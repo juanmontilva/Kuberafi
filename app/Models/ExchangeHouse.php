@@ -59,7 +59,17 @@ class ExchangeHouse extends Model
     {
         return $this->belongsToMany(CurrencyPair::class, 'exchange_house_currency_pair')
             ->using(ExchangeHouseCurrencyPair::class)
-            ->withPivot(['margin_percent', 'min_amount', 'max_amount', 'is_active', 'deleted_at'])
+            ->withPivot([
+                'margin_percent',
+                'min_amount',
+                'max_amount',
+                'is_active',
+                'deleted_at',
+                'commission_model',
+                'commission_percent',
+                'buy_rate',
+                'sell_rate'
+            ])
             ->withTimestamps();
     }
 

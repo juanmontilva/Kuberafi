@@ -165,8 +165,15 @@ class OrderController extends Controller
                     'quote_currency' => $pair->quote_currency,
                     'current_rate' => $pair->current_rate,
                     'calculation_type' => $pair->calculation_type,
-                    'min_amount' => $pair->pivot->min_amount, // Límite de la casa de cambio
-                    'max_amount' => $pair->pivot->max_amount, // Límite de la casa de cambio
+                    'min_amount' => $pair->pivot->min_amount,
+                    'max_amount' => $pair->pivot->max_amount,
+                    'pivot' => [
+                        'commission_model' => $pair->pivot->commission_model ?? 'percentage',
+                        'commission_percent' => $pair->pivot->commission_percent,
+                        'buy_rate' => $pair->pivot->buy_rate,
+                        'sell_rate' => $pair->pivot->sell_rate,
+                        'margin_percent' => $pair->pivot->margin_percent,
+                    ],
                 ];
             });
         
@@ -232,7 +239,9 @@ class OrderController extends Controller
         $validated = $request->validate([
             'currency_pair_id' => 'required|exists:currency_pairs,id',
             'base_amount' => 'required|numeric|min:0.01',
-            'house_commission_percent' => 'required|numeric|min:0|max:100',
+            'house_commission_percent' => 'nullable|numeric|min:0|max:100',
+            'buy_rate' => 'nullable|numeric|min:0',
+            'sell_rate' => 'nullable|numeric|min:0',
             'customer_id' => 'nullable|exists:customers,id',
             'notes' => 'nullable|string|max:1000',
             'payment_method_selection_mode' => 'required|in:auto,manual',
@@ -271,16 +280,20 @@ class OrderController extends Controller
             ]);
         }
         
-        // VALIDAR SALDO SUFICIENTE ANTES DE CREAR LA ORDEN
+        // CALCULAR USANDO EL MODELO DE COMISIÓN CONFIGURADO
         $baseAmount = $validated['base_amount'];
-        $houseCommissionPercent = $validated['house_commission_percent'];
-        $houseCommissionAmount = $baseAmount * ($houseCommissionPercent / 100);
-        $netAmount = $baseAmount - $houseCommissionAmount;
         
-        // Calcular según el tipo de operación del par
-        $quoteAmount = $currencyPair->calculation_type === 'divide'
-            ? $netAmount / $currencyPair->current_rate
-            : $netAmount * $currencyPair->current_rate;
+        // Usar el modelo de comisión del pivot para calcular
+        $calculation = $pivotData->pivot->calculateOrder($baseAmount, 'buy');
+        
+        $quoteAmount = $calculation['quote_amount'];
+        $houseCommissionAmount = $calculation['commission_amount'];
+        $spreadProfit = $calculation['spread_profit'];
+        $commissionModel = $calculation['commission_model'];
+        
+        // Para compatibilidad con código existente
+        $houseCommissionPercent = $validated['house_commission_percent'] ?? $pivotData->pivot->commission_percent ?? 0;
+        $netAmount = $baseAmount - $houseCommissionAmount;
         
         // Determinar métodos de pago según el modo de selección
         $baseCurrency = $currencyPair->base_currency;
@@ -366,19 +379,37 @@ class OrderController extends Controller
             ])->withInput();
         }
         
-        $order = DB::transaction(function () use ($validated, $currencyPair, $user, $baseAmount, $houseCommissionPercent, $houseCommissionAmount, $netAmount, $quoteAmount, $paymentMethodIn, $paymentMethodOut, $selectionMode) {
+        $order = DB::transaction(function () use ($validated, $currencyPair, $user, $baseAmount, $houseCommissionPercent, $houseCommissionAmount, $netAmount, $quoteAmount, $paymentMethodIn, $paymentMethodOut, $selectionMode, $calculation, $commissionModel, $spreadProfit) {
+            // Calcular el margen real según el modelo
+            $realMarginPercent = $houseCommissionPercent;
+            $totalProfitInBase = $houseCommissionAmount; // Por defecto para percentage
+            
+            if ($commissionModel === 'spread' || $commissionModel === 'mixed') {
+                // Convertir spread profit de quote currency a base currency
+                $buyRate = $calculation['buy_rate'] ?? 1;
+                $spreadProfitInBase = $buyRate > 0 ? $spreadProfit / $buyRate : 0;
+                
+                if ($commissionModel === 'spread') {
+                    $totalProfitInBase = $spreadProfitInBase;
+                    $realMarginPercent = $baseAmount > 0 ? ($spreadProfitInBase / $baseAmount) * 100 : 0;
+                } else { // mixed
+                    $totalProfitInBase = $spreadProfitInBase + $houseCommissionAmount;
+                    $realMarginPercent = $baseAmount > 0 ? ($totalProfitInBase / $baseAmount) * 100 : 0;
+                }
+            }
+            
             // Comisión de plataforma (considerar promoción)
             $exchangeHouse = $user->exchangeHouse;
             if ($exchangeHouse->zero_commission_promo) {
                 $platformCommission = 0;
-                $exchangeCommission = $houseCommissionAmount; // La casa se queda con todo
+                $exchangeCommission = $totalProfitInBase; // La casa se queda con todo
             } else {
                 $platformRate = \App\Models\SystemSetting::getPlatformCommissionRate() / 100;
                 $platformCommission = $baseAmount * $platformRate;
-                $exchangeCommission = $houseCommissionAmount - $platformCommission;
+                $exchangeCommission = $totalProfitInBase - $platformCommission;
             }
             
-            // Crear la orden con los métodos de pago específicos
+            // Crear la orden con los métodos de pago específicos y nuevo modelo de comisión
             $order = Order::create([
                 'exchange_house_id' => $user->exchange_house_id,
                 'currency_pair_id' => $validated['currency_pair_id'],
@@ -391,9 +422,13 @@ class OrderController extends Controller
                 'base_amount' => $baseAmount,
                 'quote_amount' => $quoteAmount,
                 'market_rate' => $currencyPair->current_rate,
-                'applied_rate' => $currencyPair->current_rate,
-                'expected_margin_percent' => $houseCommissionPercent,
-                'actual_margin_percent' => $houseCommissionPercent,
+                'applied_rate' => $calculation['rate_applied'],
+                'commission_model' => $commissionModel,
+                'buy_rate' => $calculation['buy_rate'],
+                'sell_rate' => $calculation['sell_rate'],
+                'spread_profit' => $spreadProfit,
+                'expected_margin_percent' => $realMarginPercent,
+                'actual_margin_percent' => $realMarginPercent,
                 'house_commission_percent' => $houseCommissionPercent,
                 'house_commission_amount' => $houseCommissionAmount,
                 'platform_commission' => $platformCommission,
@@ -492,7 +527,7 @@ class OrderController extends Controller
         ]);
         
         DB::transaction(function () use ($order, $validated) {
-            // Calcular la ganancia real basada en el monto entregado
+            // Calcular la ganancia real basada en el monto entregado y el modelo de comisión
             $expectedQuoteAmount = $order->quote_amount;
             $actualQuoteAmount = $validated['actual_quote_amount'];
             $differenceInQuote = $expectedQuoteAmount - $actualQuoteAmount;
@@ -501,20 +536,52 @@ class OrderController extends Controller
             $appliedRate = $validated['actual_rate'];
             $differenceInBase = $differenceInQuote / $appliedRate;
             
-            // Ganancia adicional + ganancia esperada (ambas en moneda base)
-            $expectedCommission = $order->house_commission_amount;
-            $realHouseCommission = $expectedCommission + $differenceInBase;
+            $commissionModel = $order->commission_model ?? 'percentage';
+            $realHouseCommission = 0;
+            $totalRealProfitInBase = 0;
+            
+            switch ($commissionModel) {
+                case 'percentage':
+                    // Ganancia adicional + ganancia esperada (% fijo)
+                    $expectedCommission = $order->house_commission_amount;
+                    $realHouseCommission = $expectedCommission + $differenceInBase;
+                    $totalRealProfitInBase = $realHouseCommission;
+                    break;
+                    
+                case 'spread':
+                    // Ganancia es el spread original + diferencia en base
+                    $buyRate = (float) ($order->buy_rate ?? 1);
+                    $spreadProfitQuote = (float) ($order->spread_profit ?? 0);
+                    $spreadProfitBase = $buyRate > 0 ? $spreadProfitQuote / $buyRate : 0;
+                    $totalRealProfitInBase = $spreadProfitBase + $differenceInBase;
+                    $realHouseCommission = 0; // No hay comisión % en spread puro
+                    break;
+                    
+                case 'mixed':
+                    // Ganancia es spread (sobre monto completo) + comisión % + diferencia
+                    $buyRate = (float) ($order->buy_rate ?? 1);
+                    $spreadProfitQuote = (float) ($order->spread_profit ?? 0);
+                    $spreadProfitBase = $buyRate > 0 ? $spreadProfitQuote / $buyRate : 0;
+                    
+                    // Comisión % del monto base
+                    $expectedCommission = $order->house_commission_amount;
+                    $realHouseCommission = $expectedCommission + $differenceInBase;
+                    
+                    // Total = spread completo + comisión
+                    $totalRealProfitInBase = $spreadProfitBase + $realHouseCommission;
+                    break;
+            }
             
             // Calcular comisión de plataforma (considerar promoción)
             $exchangeHouse = $order->exchangeHouse;
             if ($exchangeHouse->zero_commission_promo) {
                 $realPlatformCommission = 0;
-                $realExchangeCommission = $realHouseCommission; // La casa se queda con todo
+                $realExchangeCommission = $totalRealProfitInBase; // La casa se queda con todo
             } else {
-                // Si la casa ganó $50, la plataforma cobra 0.15% sobre el monto base (no sobre la comisión)
+                // Plataforma cobra sobre el monto base (no sobre la comisión)
                 $platformRate = \App\Models\SystemSetting::getPlatformCommissionRate();
                 $realPlatformCommission = ($order->base_amount * $platformRate) / 100;
-                $realExchangeCommission = $realHouseCommission - $realPlatformCommission;
+                $realExchangeCommission = $totalRealProfitInBase - $realPlatformCommission;
             }
             
             // Actualizar orden con datos reales

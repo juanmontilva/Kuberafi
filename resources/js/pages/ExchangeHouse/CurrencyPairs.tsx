@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import KuberafiLayout from '@/layouts/kuberafi-layout';
 import { CurrencyPairRateHistory } from '@/components/CurrencyPairRateHistory';
 import { useState } from 'react';
@@ -33,6 +34,10 @@ interface CurrencyPair {
     min_amount: string;
     max_amount: string;
     is_active: boolean;
+    commission_model?: 'percentage' | 'spread' | 'mixed';
+    commission_percent?: number;
+    buy_rate?: number;
+    sell_rate?: number;
   };
 }
 
@@ -59,6 +64,9 @@ function CurrencyPairs({ activePairs, availablePairs, platformCommissionRate }: 
     margin_percent: '',
     min_amount: '',
     max_amount: '',
+    commission_model: 'percentage' as 'percentage' | 'spread' | 'mixed',
+    commission_percent: '',
+    buy_rate: '',
   });
 
   const handleAdd = (e: React.FormEvent) => {
@@ -69,7 +77,15 @@ function CurrencyPairs({ activePairs, availablePairs, platformCommissionRate }: 
       onSuccess: () => {
         setShowAddForm(false);
         setSelectedPair(null);
-        setFormData({ current_rate: '', margin_percent: '', min_amount: '', max_amount: '' });
+        setFormData({
+          current_rate: '',
+          margin_percent: '',
+          min_amount: '',
+          max_amount: '',
+          commission_model: 'percentage',
+          commission_percent: '',
+          buy_rate: '',
+        });
       }
     });
   };
@@ -104,6 +120,9 @@ function CurrencyPairs({ activePairs, availablePairs, platformCommissionRate }: 
       margin_percent: '',
       min_amount: pair.min_amount || '',
       max_amount: pair.max_amount || '',
+      commission_model: 'percentage',
+      commission_percent: '',
+      buy_rate: '',
     });
     setShowAddForm(true);
   };
@@ -115,6 +134,9 @@ function CurrencyPairs({ activePairs, availablePairs, platformCommissionRate }: 
       margin_percent: pair.pivot?.margin_percent || '',
       min_amount: pair.pivot?.min_amount || '',
       max_amount: pair.pivot?.max_amount || '',
+      commission_model: pair.pivot?.commission_model || 'percentage',
+      commission_percent: pair.pivot?.commission_percent?.toString() || pair.pivot?.margin_percent || '',
+      buy_rate: pair.pivot?.buy_rate?.toString() || '',
     });
   };
 
@@ -128,6 +150,121 @@ function CurrencyPairs({ activePairs, availablePairs, platformCommissionRate }: 
     const amt = parseFloat(amount);
     const margin = parseFloat(marginPercent);
     return ((amt * margin) / 100).toFixed(2);
+  };
+
+  const getCommissionModelLabel = (model?: string) => {
+    switch (model) {
+      case 'percentage':
+        return { label: 'Porcentaje Fijo', icon: '📊', color: 'text-blue-500' };
+      case 'spread':
+        return { label: 'Spread', icon: '💱', color: 'text-green-500' };
+      case 'mixed':
+        return { label: 'Mixto', icon: '🔀', color: 'text-purple-500' };
+      default:
+        return { label: 'Porcentaje Fijo', icon: '📊', color: 'text-blue-500' };
+    }
+  };
+
+  const renderPairMetrics = (pair: CurrencyPair) => {
+    const model = pair.pivot?.commission_model || 'percentage';
+    
+    if (model === 'percentage') {
+      // Modelo Porcentaje: Tasa Base + Margen = Tasa Efectiva
+      return (
+        <>
+          <div>
+            <p className="text-muted-foreground">Tasa Base</p>
+            <p className="font-semibold">{parseFloat(pair.current_rate).toFixed(6)}</p>
+          </div>
+          <div>
+            <p className="text-muted-foreground">Comisión</p>
+            <p className="font-semibold text-blue-500">
+              {pair.pivot?.commission_percent || pair.pivot?.margin_percent}%
+            </p>
+          </div>
+          <div>
+            <p className="text-muted-foreground">Tasa Efectiva</p>
+            <p className="font-semibold text-blue-400">
+              {calculateEffectiveRate(pair.current_rate, pair.pivot?.margin_percent || '0')}
+            </p>
+          </div>
+          <div>
+            <p className="text-muted-foreground">Ganancia por $1000</p>
+            <p className="font-semibold text-green-600">
+              ${calculateProfit('1000', pair.pivot?.commission_percent?.toString() || pair.pivot?.margin_percent || '0')}
+            </p>
+          </div>
+        </>
+      );
+    }
+    
+    if (model === 'spread') {
+      // Modelo Spread: Tasa Compra vs Tasa Venta
+      const buyRate = parseFloat(pair.pivot?.buy_rate?.toString() || '0');
+      const sellRate = parseFloat(pair.pivot?.sell_rate?.toString() || pair.current_rate);
+      const spreadAmount = sellRate - buyRate;
+      const spreadPercent = buyRate > 0 ? ((spreadAmount / buyRate) * 100).toFixed(2) : '0';
+      
+      return (
+        <>
+          <div>
+            <p className="text-muted-foreground">Tasa Compra (Costo)</p>
+            <p className="font-semibold text-orange-500">{buyRate.toFixed(6)}</p>
+          </div>
+          <div>
+            <p className="text-muted-foreground">Tasa Venta (Cliente)</p>
+            <p className="font-semibold text-green-500">{sellRate.toFixed(6)}</p>
+          </div>
+          <div>
+            <p className="text-muted-foreground">Spread</p>
+            <p className="font-semibold text-blue-400">
+              {spreadAmount.toFixed(6)} ({spreadPercent}%)
+            </p>
+          </div>
+          <div>
+            <p className="text-muted-foreground">Ganancia por $1000</p>
+            <p className="font-semibold text-green-600">
+              ${((1000 / buyRate) * spreadAmount).toFixed(2)}
+            </p>
+          </div>
+        </>
+      );
+    }
+    
+    if (model === 'mixed') {
+      // Modelo Mixto: Spread + Comisión
+      const buyRate = parseFloat(pair.pivot?.buy_rate?.toString() || '0');
+      const sellRate = parseFloat(pair.pivot?.sell_rate?.toString() || pair.current_rate);
+      const spreadAmount = sellRate - buyRate;
+      const commissionPercent = parseFloat(pair.pivot?.commission_percent?.toString() || '0');
+      
+      return (
+        <>
+          <div>
+            <p className="text-muted-foreground">Spread</p>
+            <p className="font-semibold text-green-500">
+              {spreadAmount.toFixed(6)}
+            </p>
+          </div>
+          <div>
+            <p className="text-muted-foreground">Comisión Extra</p>
+            <p className="font-semibold text-purple-500">{commissionPercent}%</p>
+          </div>
+          <div>
+            <p className="text-muted-foreground">Tasa al Cliente</p>
+            <p className="font-semibold text-blue-400">{sellRate.toFixed(6)}</p>
+          </div>
+          <div>
+            <p className="text-muted-foreground">Ganancia por $1000</p>
+            <p className="font-semibold text-green-600">
+              ${(((1000 / buyRate) * spreadAmount) + (1000 * commissionPercent / 100)).toFixed(2)}
+            </p>
+          </div>
+        </>
+      );
+    }
+    
+    return null;
   };
 
   return (
@@ -320,31 +457,22 @@ function CurrencyPairs({ activePairs, availablePairs, platformCommissionRate }: 
                     </div>
 
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-                      <div>
-                        <p className="text-muted-foreground">Tasa Base</p>
-                        <p className="font-semibold">{parseFloat(pair.current_rate).toFixed(6)}</p>
-                      </div>
-                      <div>
-                        <p className="text-muted-foreground">Tu Margen</p>
-                        <p className="font-semibold text-green-600">{pair.pivot?.margin_percent}%</p>
-                      </div>
-                      <div>
-                        <p className="text-muted-foreground">Tasa Efectiva</p>
-                        <p className="font-semibold text-blue-400">
-                          {calculateEffectiveRate(pair.current_rate, pair.pivot?.margin_percent || '0')}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-muted-foreground">Ganancia por $1000</p>
-                        <p className="font-semibold text-green-600">
-                          ${calculateProfit('1000', pair.pivot?.margin_percent || '0')}
-                        </p>
-                      </div>
+                      {renderPairMetrics(pair)}
                     </div>
 
-                    <div className="flex items-center gap-4 text-xs text-muted-foreground mt-3 pt-3 border-t border-gray-800">
-                      <span>Min: ${pair.pivot?.min_amount || pair.min_amount}</span>
-                      <span>Max: ${pair.pivot?.max_amount || pair.max_amount}</span>
+                    <div className="flex items-center justify-between gap-4 text-xs text-muted-foreground mt-3 pt-3 border-t border-gray-800">
+                      <div className="flex items-center gap-4">
+                        <span>Min: ${pair.pivot?.min_amount || pair.min_amount}</span>
+                        <span>Max: ${pair.pivot?.max_amount || pair.max_amount}</span>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <span className={getCommissionModelLabel(pair.pivot?.commission_model).color}>
+                          {getCommissionModelLabel(pair.pivot?.commission_model).icon}
+                        </span>
+                        <span className="font-medium">
+                          {getCommissionModelLabel(pair.pivot?.commission_model).label}
+                        </span>
+                      </div>
                     </div>
                   </div>
                 ))}
@@ -511,11 +639,11 @@ function CurrencyPairs({ activePairs, availablePairs, platformCommissionRate }: 
 
         {/* Edit Form Modal */}
         {editingPair && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-            <Card className="w-full max-w-md">
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+            <Card className="w-full max-w-2xl max-h-[90vh] overflow-y-auto">
               <CardHeader>
                 <CardTitle>Editar {editingPair.symbol}</CardTitle>
-                <CardDescription>Actualiza tu configuración</CardDescription>
+                <CardDescription>Actualiza tu configuración y modelo de comisión</CardDescription>
               </CardHeader>
               <CardContent>
                 <form onSubmit={handleUpdate} className="space-y-4">
@@ -533,19 +661,210 @@ function CurrencyPairs({ activePairs, availablePairs, platformCommissionRate }: 
                       💵 Esta es la tasa del mercado (ej: 390.00 VES por 1 USD)
                     </p>
                   </div>
-                  <div>
-                    <Label>Tu Margen de Ganancia (%)*</Label>
-                    <Input
-                      type="number"
-                      step="0.01"
-                      value={formData.margin_percent}
-                      onChange={(e) => setFormData({ ...formData, margin_percent: e.target.value })}
-                      required
-                    />
-                    <p className="text-xs text-muted-foreground mt-1">
-                      Tasa efectiva: {calculateEffectiveRate(formData.current_rate || editingPair.current_rate, formData.margin_percent)}
-                    </p>
+
+                  {/* Selector de Modelo de Comisión */}
+                  <div className="space-y-3">
+                    <Label>Modelo de Comisión</Label>
+                    <RadioGroup
+                      value={formData.commission_model}
+                      onValueChange={(value: any) => setFormData({ ...formData, commission_model: value })}
+                    >
+                      <div className="flex items-center space-x-2 p-3 border rounded-lg hover:bg-accent/50 cursor-pointer">
+                        <RadioGroupItem value="percentage" id="edit-percentage" />
+                        <Label htmlFor="edit-percentage" className="flex-1 cursor-pointer">
+                          <div className="flex items-center gap-2">
+                            <span className="text-blue-500">📊</span>
+                            <div>
+                              <div className="font-semibold">Porcentaje Fijo</div>
+                              <div className="text-xs text-muted-foreground">Comisión tradicional sobre el monto</div>
+                            </div>
+                          </div>
+                        </Label>
+                      </div>
+
+                      <div className="flex items-center space-x-2 p-3 border rounded-lg hover:bg-accent/50 cursor-pointer">
+                        <RadioGroupItem value="spread" id="edit-spread" />
+                        <Label htmlFor="edit-spread" className="flex-1 cursor-pointer">
+                          <div className="flex items-center gap-2">
+                            <span className="text-green-500">💱</span>
+                            <div>
+                              <div className="font-semibold">Spread (Compra/Venta)</div>
+                              <div className="text-xs text-muted-foreground">Ganancia por diferencia de tasas</div>
+                            </div>
+                          </div>
+                        </Label>
+                      </div>
+
+                      <div className="flex items-center space-x-2 p-3 border rounded-lg hover:bg-accent/50 cursor-pointer">
+                        <RadioGroupItem value="mixed" id="edit-mixed" />
+                        <Label htmlFor="edit-mixed" className="flex-1 cursor-pointer">
+                          <div className="flex items-center gap-2">
+                            <span className="text-purple-500">🔀</span>
+                            <div>
+                              <div className="font-semibold">Mixto (Spread + Porcentaje)</div>
+                              <div className="text-xs text-muted-foreground">Combina ambos modelos</div>
+                            </div>
+                          </div>
+                        </Label>
+                      </div>
+                    </RadioGroup>
                   </div>
+
+                  {/* Campos según Modelo */}
+                  {formData.commission_model === 'percentage' && (
+                    <div>
+                      <Label>Comisión (%)*</Label>
+                      <Input
+                        type="number"
+                        step="0.01"
+                        value={formData.commission_percent}
+                        onChange={(e) => setFormData({ ...formData, commission_percent: e.target.value })}
+                        required
+                        placeholder="5.00"
+                      />
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Ejemplo: 5% de comisión sobre el monto
+                      </p>
+                    </div>
+                  )}
+
+                  {formData.commission_model === 'spread' && (
+                    <div className="space-y-4">
+                      <div>
+                        <Label>Tu Costo (Tasa de Compra)*</Label>
+                        <Input
+                          type="number"
+                          step="0.000001"
+                          value={formData.buy_rate}
+                          onChange={(e) => {
+                            const buyRate = parseFloat(e.target.value);
+                            const sellRate = parseFloat(formData.current_rate || editingPair.current_rate);
+                            const margin = buyRate && sellRate ? ((sellRate - buyRate) / buyRate * 100).toFixed(2) : '0';
+                            setFormData({ 
+                              ...formData, 
+                              buy_rate: e.target.value,
+                              margin_percent: margin
+                            });
+                          }}
+                          required
+                          placeholder="300.00"
+                        />
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Tu costo por unidad
+                        </p>
+                      </div>
+
+                      {formData.buy_rate && (
+                        <div className="p-3 bg-green-500/10 border border-green-500/30 rounded-lg">
+                          <div className="space-y-1 text-sm">
+                            <div className="flex justify-between">
+                              <span className="text-muted-foreground">Tasa de venta (mercado):</span>
+                              <span className="font-bold">
+                                {parseFloat(formData.current_rate || editingPair.current_rate).toFixed(6)}
+                              </span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-green-600 dark:text-green-400">Tu margen de ganancia:</span>
+                              <span className="font-bold text-green-600 dark:text-green-400">
+                                {formData.margin_percent}%
+                              </span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-green-600 dark:text-green-400">Ganancia por unidad:</span>
+                              <span className="font-bold text-green-600 dark:text-green-400">
+                                {(parseFloat(formData.current_rate || editingPair.current_rate) - parseFloat(formData.buy_rate)).toFixed(6)}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {formData.commission_model === 'mixed' && (
+                    <div className="space-y-4">
+                      <div>
+                        <Label>Tu Costo (Tasa de Compra)*</Label>
+                        <Input
+                          type="number"
+                          step="0.000001"
+                          value={formData.buy_rate}
+                          onChange={(e) => {
+                            const buyRate = parseFloat(e.target.value);
+                            const sellRate = parseFloat(formData.current_rate || editingPair.current_rate);
+                            const margin = buyRate && sellRate ? ((sellRate - buyRate) / buyRate * 100).toFixed(2) : '0';
+                            setFormData({ 
+                              ...formData, 
+                              buy_rate: e.target.value,
+                              margin_percent: margin
+                            });
+                          }}
+                          required
+                          placeholder="300.00"
+                        />
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Tu costo por unidad (igual que en Spread)
+                        </p>
+                      </div>
+
+                      <div>
+                        <Label>Comisión Adicional (%)*</Label>
+                        <Input
+                          type="number"
+                          step="0.01"
+                          value={formData.commission_percent}
+                          onChange={(e) => setFormData({ ...formData, commission_percent: e.target.value })}
+                          required
+                          placeholder="2.00"
+                        />
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Comisión extra sobre el monto de la transacción
+                        </p>
+                      </div>
+
+                      {formData.buy_rate && formData.commission_percent && (
+                        <div className="p-3 bg-purple-500/10 border border-purple-500/30 rounded-lg">
+                          <div className="space-y-2 text-sm">
+                            <div className="font-semibold text-purple-600 dark:text-purple-400 mb-2">
+                              Ejemplo con $1,000:
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-muted-foreground">Tasa de venta:</span>
+                              <span className="font-bold">
+                                {parseFloat(formData.current_rate || editingPair.current_rate).toFixed(6)}
+                              </span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-muted-foreground">Tu margen spread:</span>
+                              <span className="font-bold">
+                                {formData.margin_percent}%
+                              </span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-green-600 dark:text-green-400">Ganancia por spread:</span>
+                              <span className="font-bold text-green-600 dark:text-green-400">
+                                ${(1000 * parseFloat(formData.margin_percent) / 100).toFixed(2)}
+                              </span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-green-600 dark:text-green-400">Ganancia por comisión:</span>
+                              <span className="font-bold text-green-600 dark:text-green-400">
+                                ${(1000 * parseFloat(formData.commission_percent) / 100).toFixed(2)}
+                              </span>
+                            </div>
+                            <div className="border-t border-purple-500/30 pt-2 mt-2">
+                              <div className="flex justify-between">
+                                <span className="font-bold text-purple-600 dark:text-purple-400">Ganancia TOTAL:</span>
+                                <span className="font-bold text-purple-600 dark:text-purple-400 text-lg">
+                                  ${((1000 * parseFloat(formData.margin_percent) / 100) + (1000 * parseFloat(formData.commission_percent) / 100)).toFixed(2)}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
                   <div className="p-3 bg-blue-950/50 border border-blue-800 rounded-lg">
                     <p className="text-xs text-blue-300 mb-2">
                       📋 Límites de la plataforma para este par:
